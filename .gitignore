@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local page cache (re-downloaded automatically)
+zcache/
+*.html
+
+# Downloaded dish photos (re-downloaded automatically)
+zimages/
+previews/
+
+# Your private files - NEVER commit these
+.env
+Gevravi Sheets.xlsx
+smartbiz_bulk_upload_template_*.xlsx
+smartbiz_*.xlsx
+results*.json
+picks*.json
+pairs*.json

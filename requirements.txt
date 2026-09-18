@@ -1,0 +1,4 @@
+# ---> Python (add via: pip install -r requirements.txt)
+requests
+Pillow
+openpyxl
