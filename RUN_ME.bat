@@ -39,19 +39,19 @@ if not defined PY (
 REM ---- 2. Sanity: are all repo files present? ----
 if not exist "app.py" (
   echo [ERROR] app.py missing. Download the FULL repo ZIP
-  echo (Code button -^> Download ZIP) and extract everything, then retry.
+  echo Code button -^> Download ZIP -^> extract everything, then retry.
   pause
   exit /b 1
 )
 if not exist "data\pairs.json" (
   echo [ERROR] data\pairs.json missing. Download the FULL repo ZIP
-  echo (Code button -^> Download ZIP) and extract everything, then retry.
+  echo Code button -^> Download ZIP -^> extract everything, then retry.
   pause
   exit /b 1
 )
 if not exist "data\smartbiz_template.xlsx" (
   echo [ERROR] data\smartbiz_template.xlsx missing. Download the FULL repo ZIP
-  echo (Code button -^> Download ZIP) and extract everything, then retry.
+  echo Code button -^> Download ZIP -^> extract everything, then retry.
   pause
   exit /b 1
 )
@@ -68,9 +68,8 @@ if errorlevel 1 (
 )
 
 REM ---- 4. Already running? (double-clicked twice, or leftover server) ----
-set APPUP=no
-for /f %%i in ('powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:8501/_stcore/health' -TimeoutSec 4).StatusCode } catch { 'down' }"') do set APPUP=%%i
-if "%APPUP%"=="200" (
+powershell -NoProfile -Command "try { $null = Invoke-WebRequest -Uri http://localhost:8501/_stcore/health -TimeoutSec 2; exit 0 } catch { exit 1 }" >nul 2>nul
+if %errorlevel%==0 (
   echo.
   echo App is ALREADY running. Opening it in your browser...
   start "" "http://localhost:8501"
