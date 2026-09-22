@@ -1,20 +1,10 @@
-# Resturant-Scrapper
+# Resturant-Scrapper PROD v1.0
 
-Free pipeline that takes a restaurant menu Excel sheet (dish names + prices),
+Free pipeline that takes **any vendor's menu Excel** (dish names + prices),
 finds the **best-quality photo for every dish from Zomato**, hosts the photos
 on **ImageBB** (free), and fills the **Amazon SmartBiz bulk-upload sheet** —
-ready to upload, zero rupees spent.
-
-Built for: Gevravi Sheets (81 Maharashtrian dishes) → SmartBiz. Result: **71
-dishes with eye-verified Zomato photos, 10 rare items honestly reported as
-not-found** instead of filled with wrong photos.
-
----
-
-## How it works (simple version)
-
-Think of it as a 5-step factory line. Raw material (dish names) goes in one
-end, finished SmartBiz Excel comes out the other:
+ready to upload, zero rupees spent. Team use: 1–2 people at a time via a
+Streamlit web app (free hosting).
 
 ```
 YOUR MENU EXCEL
@@ -22,98 +12,81 @@ YOUR MENU EXCEL
       ▼
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌──────────────┐
 │ 1. HARVEST  │──▶│  2. MATCH  │──▶│3. DOWNLOAD  │──▶│  4. UPLOAD  │──▶│   5. BUILD   │
-│ Zomato menus│   │ your dish = │   │ check size, │   │ ImageBB   │   │ SmartBiz     │
-│ + dish pics │   │ which photo?│   │ make JPGs   │   │ hosting   │   │ Excel file   │
+│ Zomato menus│   │ your dish = │   │ quality gate│   │ ImageBB   │   │ SmartBiz     │
+│ + dish pics │   │ which photo?│   │ + fallback  │   │ hosting   │   │ Excel files  │
 └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └──────────────┘
 ```
 
-### Step 1 — HARVEST (collecting Zomato photos)
+## Use it (team web app — no install)
 
-- The script visits Zomato restaurant menu pages (e.g.
-  `zomato.com/pune/some-restaurant/order`) for ~150 restaurants across Pune
-  and Mumbai, in cuisines matching the menu (Maharashtrian, North Indian,
-  Chinese, Biryani, Gujarati, …).
-- Trick that makes it work: a Zomato menu page hides its **entire menu as
-  JSON data inside the HTML** (`window.__PRELOADED_STATE__`). No browser
-  automation, no paid API — one normal web request per page, then read the
-  hidden data.
-- Every menu item that has a photo gives one **(dish name → photo URL)**
-  pair. Real run: **~6,500 pairs** from real restaurant menus
-  (`b.zmtcdn.com/dish_photos/...`).
+1. Open the Streamlit app URL (see Deployment below).
+2. Type vendor name (SKU prefix auto-derives, editable — `HFC-001`…).
+3. Upload the menu Excel. Format, row 1: `Item Name | Category | Description | Price`.
+4. Paste the team ImageBB key (or the deployer saved it in app Secrets).
+5. **Run pipeline** → download `*_UPLOAD_READY.xlsx` (upload to SmartBiz as-is)
+   and `*_NOVEL_PENDING.xlsx` (imageless dishes — shoot real kitchen photos).
+6. **Spot-check photos before uploading.** A wrong photo is worse than no photo.
 
-### Step 2 — MATCH (which photo belongs to your dish?)
-
-- Your "Shev Bhaji" will never exactly equal Zomato's "Shev Bhaji Rassa",
-  so the script compares **word by word**:
-  - Spelling variants are normalised first: `sev = shev`, `flower =
-    cauliflower = gobi`, `pitla = pithla = zunka`, `vengaya = onion`,
-    `rassa = curry = masala`, and ~40 more groups.
-  - Score = how much of YOUR dish name the Zomato item covers, minus a
-    penalty for extra words (so "Paneer Masala" beats "Paneer Masala Dosa").
-  - Bonus points for special words (`kala`, `jain`, `butter`, `tandoor`…).
-- **Safety rules (learned the hard way):**
-  - Any item with a non-veg word (chicken, mutton, egg, fish, meat…) is
-    **banned** — an early version put a chicken photo on a veg dish.
-  - A papad dish can only match a papad photo.
-  - One photo is never reused for two dishes.
-  - Dishes with no true match (Soyabean Kentucky, Kala Masala specials…)
-    go to `novel_list.txt` **imageless on purpose** — a wrong photo is
-    worse than no photo.
-
-### Step 3 — DOWNLOAD (quality gate)
-
-- Each photo is downloaded and opened: rejects under ~400px or broken
-  files, converts everything to RGB JPG, shrinks giants to max 1600px.
-- Then a **human eye-check**: every risky pick is viewed before it is
-  accepted (this round caught and replaced 2 bad ones).
-
-### Step 4 — UPLOAD (free hosting)
-
-- Clean JPGs are uploaded to **ImageBB free API** → public
-  `https://i.ibb.co/...` links. SmartBiz explicitly whitelists `imgbb.com`
-  / `ibb.co` image URLs, which is why ImageBB was chosen.
-
-### Step 5 — BUILD (the SmartBiz file)
-
-- The Amazon template is copied (dropdowns/validations preserved) and each
-  row is filled: SKU (`GEV-001`…), Product Name, MRP = Selling Price = your
-  price, `FOOD_AND_GROCERY / Other Food and Grocery`, description, Image1 URL.
-- Two files come out:
-  - `smartbiz_UPLOAD_READY_71.xlsx` — only rows WITH photos. Upload as-is.
-  - `smartbiz_NOVEL_PENDING_10.xlsx` — the 10 not-found dishes, pre-filled,
-    waiting for real (kitchen) photos.
-
----
-
-## Fallbacks — what happens when something breaks
-
-| Problem | Fallback |
-|---|---|
-| Zomato blocks a page / bot-wall | Page is skipped; 150 restaurants means one loss never matters. Swiggy stayed fully blocked (empty responses) — documented, not retried forever. |
-| Dish has no Zomato photo (rare/novel) | Reported in `novel_list.txt`, row left imageless. Never substituted with a wrong photo. |
-| Photo too small / corrupt | Rejected at download; next-best match tried. |
-| ImageBB upload hiccup (network/SSL) | Retried; local JPG copies kept in `zimages/` so nothing is ever lost. |
-| Wrong match slips through | Human eye-check gate on all risky picks + `MANUAL_OVERRIDES` table for known-tricky dishes (Vengaya=onion, Zunka=Pitla…). |
-| Re-running | Page cache (`zcache/`) + stage flags (`--stage match`, `--stage build`) — re-match or rebuild in seconds without re-scraping. |
-
-Dead ends hit during research (kept here so nobody repeats them): Swiggy
-`menu/pl` API (bot-walled), Zomato homepage search (bot-check page), Bing
-image index (zero Zomato-CDN dish photos), Wikimedia/Openverse auto-fetch
-(wrong photos: a baby for Paneer Tikka Masala, a mountain for Pitla —
-automation without verification was scrapped).
-
-## Run it
+## Use it (CLI, local)
 
 ```bash
 pip install -r requirements.txt
-set IMGBB_API_KEY=your_free_key   # from https://api.imgbb.com/  (never commit this!)
-python zomato_scrapper.py --menu-excel "Gevravi Sheets.xlsx" ^
-    --template "smartbiz_bulk_upload_template_v5.xlsx" --out ./smartbiz_out --stage all
+set IMGBB_API_KEY=your_free_key   # https://api.imgbb.com/ (never commit this!)
+python zomato_scrapper.py --menu-excel "Menu.xlsx" ^
+    --template "data/smartbiz_template.xlsx" --out ./smartbiz_out ^
+    --sku-prefix HFC --stage all
 ```
+
+Stages run separately: `--stage harvest | match | download | build`.
+Re-runs are idempotent: unchanged picks log `KEEP`, only new picks upload.
+
+## How matching stays honest (read before onboarding a vendor)
+
+- Word-by-word fuzzy match with spelling groups (`sev=shev`, `gobi=flower`),
+  generic plural handling (`corns→corn`), size/stop words, non-veg ban,
+  papad-only-papad rule, one-photo-per-dish (size variants may share).
+- Coverage ≥ 0.66 and score ≥ 0.4 required, else the dish goes imageless.
+- Every match run prints **POOL-GAP vs MATCHER-GAP** diagnostics per miss:
+  - `POOL-GAP` → the photo pool lacks that dish family → add chain seeds,
+    re-harvest, commit the new `data/pairs.json`.
+  - `MATCHER-GAP` → pool has candidates but all score too low → fix
+    `toks`/`STOP`/`CANON`, never lower thresholds blindly.
+- `NOVEL_DISHES` starts empty; add a dish only after eye-check proves its
+  auto-pick is category-wrong. `MANUAL_OVERRIDES` likewise (verify the target
+  exists in `pairs.json` with a big file first).
+
+## Onboarding a very different vendor
+
+1. Check `CUISINE_TARGETS` covers their food (add cuisine slugs if not).
+2. If their dishes live in delivery chains not yet seeded, add verified
+   `/order` URLs to `CHAIN_SEEDS` (verify HTTP 200 + parseable menu first —
+   guessed slugs just log `0 imaged items`).
+3. Run harvest locally, eye-check risky picks, commit the refreshed
+   `data/pairs.json`. The hosted app never harvests (cloud IPs get bot-walled;
+   CDN + ImageBB traffic is fine).
+
+## Deployment (Streamlit Community Cloud, $0)
+
+1. Push this repo to GitHub (branch `prodv1.0`).
+2. https://share.streamlit.io → New app → repo `Lolxd-1/Resturant-Scrapper`,
+   branch `prodv1.0`, main file `app.py`.
+3. App settings → Secrets: `IMGBB_API_KEY = "team-key"` (or paste per run).
+4. Deploy. App sleeps after 12 h idle; anyone opening the URL wakes it.
+   Limits that matter: ~1 GB RAM (this app uses far less), 1–2 concurrent
+   users is fine (each run gets its own temp dir).
+
+Why not Vercel: Hobby functions cap at 5 minutes; one vendor run needs
+10–30 minutes of downloads/uploads. Serverless timeouts would kill it.
 
 ## Files
 
-- `zomato_scrapper.py` — the whole pipeline (harvest → match → download → upload → build)
-- `requirements.txt` — `requests`, `Pillow`, `openpyxl` (all free)
-- `novel_list.txt` — the 10 dishes with no true Zomato photo
-- Input Excels + API key are **yours, never committed** (see `.gitignore`)
+- `app.py` — Streamlit front-end (upload → run → download).
+- `zomato_scrapper.py` — the pipeline (harvest → match → download → upload → build).
+- `data/pairs.json` — baked photo pool (12,317 Zomato dish photos; refresh via harvest).
+- `data/smartbiz_template.xlsx` — bundled SmartBiz template (or upload your own).
+- `requirements.txt` — `requests`, `Pillow`, `openpyxl`, `streamlit` (all free).
+
+## Never commit
+
+API keys, `.streamlit/secrets.toml`, vendor menu Excels, `zcache/`,
+per-run outputs (`smartbiz_out*/`, `zimages/`, results/picks JSON).

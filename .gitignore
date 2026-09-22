@@ -4,19 +4,25 @@ __pycache__/
 .venv/
 venv/
 
-# Local page cache (re-downloaded automatically)
+# Local Zomato page cache (re-downloaded automatically, never commit)
 zcache/
 *.html
 
-# Downloaded dish photos (re-downloaded automatically)
+# Per-run outputs (each run writes its own --out dir; never commit)
 zimages/
 previews/
+smartbiz_out*/
+_smoke/
+results*.json
+picks*.json
+novel_list.txt
+smartbiz_UPLOAD_READY.xlsx
+smartbiz_NOVEL_PENDING.xlsx
 
 # Your private files - NEVER commit these
 .env
-Gevravi Sheets.xlsx
-smartbiz_bulk_upload_template_*.xlsx
-smartbiz_*.xlsx
-results*.json
-picks*.json
-pairs*.json
+.streamlit/secrets.toml
+*.xlsx
+# ...except the baked photo pool + default template the app needs:
+!data/pairs.json
+!data/smartbiz_template.xlsx

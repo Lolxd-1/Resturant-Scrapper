@@ -46,14 +46,25 @@ UA = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) "
 IMGBB_URL = "https://api.imgbb.com/1/upload"
 
 # Cuisines + cities crawled for restaurant menus.
+# Default covers cafe/fast-food vendors (pizza, burger, sandwich, momos,
+# pasta, shakes, ...). For a VERY different vendor (e.g. Maharashtrian
+# thali-only), extend this list with that cuisine and re-run harvest —
+# the cuisine page slug is whatever appears in zomato.com/{city}/restaurants/{slug}.
 CUISINE_TARGETS = [
-    ("pune", "maharashtrian"), ("pune", "north-indian"),
-    ("pune", "chinese"), ("pune", "biryani"),
+    ("pune", "pizza"), ("pune", "cafe"),
+    ("pune", "fast-food"), ("pune", "burger"),
+    ("pune", "sandwich"), ("pune", "beverages"),
+    ("pune", "desserts"), ("pune", "bakery"),
+    ("pune", "chinese"), ("pune", "momos"),
+    ("pune", "pasta"), ("pune", "italian"),
+    ("pune", "coffee"), ("pune", "juices"),
+    ("pune", "ice-cream"), ("pune", "north-indian"),
     ("pune", "street-food"), ("pune", "snacks"),
-    ("pune", "gujarati"), ("pune", "rajasthani"), ("pune", "thali"),
-    ("mumbai", "maharashtrian"), ("mumbai", "north-indian"),
-    ("mumbai", "chinese"), ("mumbai", "biryani"),
-    ("mumbai", "gujarati"), ("mumbai", "mughlai"),
+    ("mumbai", "pizza"), ("mumbai", "cafe"),
+    ("mumbai", "fast-food"), ("mumbai", "burger"),
+    ("mumbai", "sandwich"), ("mumbai", "beverages"),
+    ("mumbai", "italian"), ("mumbai", "chinese"),
+    ("mumbai", "desserts"), ("mumbai", "bakery"),
 ]
 
 # Extra hand-picked restaurants (chaap houses, thali houses, ...).
@@ -68,34 +79,55 @@ SEED_RESTAURANTS = [
     "https://www.zomato.com/sawaimadhopur/food-circle-sawaimadhopur-locality",
 ]
 
+# Delivery-chain outlets — REQUIRED, not optional.
+# Why: Zomato's dine-in listing pages (/{city}/restaurants/{cuisine}) never
+# list delivery chains (Domino's, La Pino'z, Wow Momo, ...), yet chain-style
+# dishes (Paneer N Corn Pizza, Cheese Momos) live almost exclusively there.
+# This exact gap silently lost 20/101 H-FOOD dishes before these seeds existed.
+# Their /order pages expose the same __PRELOADED_STATE__ menu JSON with
+# 90%+ photo coverage. Every URL below was verified working (HTTP 200 +
+# parseable menu + imaged items); do not add guessed slugs — a wrong slug
+# just logs "0 imaged items", but verify anyway. Re-verify if Zomato
+# restructures URLs.
+CHAIN_SEEDS = [
+    "https://www.zomato.com/pune/la-pinoz-pizza-kothrud",
+    "https://www.zomato.com/pune/la-pinoz-pizza-baner",
+    "https://www.zomato.com/pune/la-pinoz-pizza-wakad",
+    "https://www.zomato.com/pune/dominos-pizza-baner",
+    "https://www.zomato.com/pune/dominos-pizza-kothrud",
+    "https://www.zomato.com/mumbai/dominos-pizza-andheri-west",
+    "https://www.zomato.com/pune/pizza-hut-hinjawadi",
+    "https://www.zomato.com/pune/pizza-hut-baner",
+    "https://www.zomato.com/pune/oven-story-pizza-wakad",
+    "https://www.zomato.com/pune/mojo-pizza-baner",
+    "https://www.zomato.com/pune/wow-momo-kothrud",
+    "https://www.zomato.com/pune/mcdonalds-baner",
+    "https://www.zomato.com/pune/kfc-baner",
+]
+
 # Dishes with no true Zomato photo (novel/rare items). They are reported in
 # novel_list.txt and left imageless instead of filling a WRONG photo.
-NOVEL_DISHES = {
-    "Tomato Chutney", "Veg Meat (Mock Meat Masala)",
-    "Soyabean Kentucky", "Gobi Roast", "Gobi Kentucky",
-    "Shevga Dry (Drumstick Dry)", "Nagali Papad (Ragi Papad)",
-    "Shevga Bhaji (Kala Masala Special)",
-    "Baingan Bhaji (Kala Masala Special)",
-    "Soyabean Bhaji (Kala Masala Special)",
-}
+# Starts EMPTY for every new vendor: the matcher reports true misses
+# automatically, and diagnose_misses() tells you whether each miss is a
+# pool gap (add CHAIN_SEEDS) or a matcher gap (fix toks/STOP/CANON).
+# Only add a dish here AFTER eye-check proves its auto-pick is
+# category-wrong and no better candidate exists in the pool. Past examples
+# (H-FOOD CAFE run, do NOT copy blindly): "Makhani Cheese Momos" (pool only
+# had makhani steak), "Fresh Garlic Dough Balls" (only veg balls in garlic),
+# "Ceet-M Mastani" (signature item; auto-pick was a McD shake+fries combo
+# matched via its "(M)" size tag — this case also motivated dropping
+# 1-letter tokens in toks()).
+NOVEL_DISHES = set()
 
 # Manual corrections: dish -> (exact Zomato item name, restaurant slug).
-# Used when the automatic matcher cannot see the answer (e.g. "Vengaya"
-# is Tamil for onion, "Zunka" is dry Pitla).
-MANUAL_OVERRIDES = {
-    "Bhendi Bhaji (Okra Curry)": ("Bhindi do pyaaza", "altitude-all-veg-all-vibe-kitchen-bar-lower-parel"),
-    "Besan Tadka (Tempered Gram Flour)": ("Zunka", "assal-amravati-mh-27-2-wakad"),
-    "Soyabean Dry": ("Tandoori Soya Chaap", "salt-indian-restaurant-kalyani-nagar"),
-    "Kanda Pakoda (Onion Fritters)": ("Vengaya Pakoda", "banana-leaf-1-kandivali-east"),
-    "Paneer Pakoda (Paneer Fritters)": ("Cheese Pakoda", "shraavan-restaurant-shivaji-nagar"),
-    "Soyabean Roast": ("Tandoori Soya Chaap", "fc-road-social-shivaji-nagar"),
-    "Soya Chilli": ("Surkh Soya Chaap (6 Pcs)", "pind-balluchi-restaurant-bar-chinchwad"),
-    "Roast Papad": ("Roasted Papad", "hotel-martand-1-hadapsar"),
-    "Plain Pulao": ("Peas Pulao", "punjab-grill-viman-nagar"),
-    "Kaju Pulao (Cashew Pulao)": ("Kashmiri Pulao", "indie-fine-dine-by-karolbaug-1-aundh"),
-    "Butter Chapati": ("Butter Roti", "pind-balluchi-restaurant-bar-chinchwad"),
-    "Green Peas Masala": ("Methi Matar Malai", "pind-balluchi-restaurant-bar-chinchwad"),
-}
+# Starts EMPTY for every new vendor. Add entries ONLY after eye-check catches
+# a flavor-wrong pick the scorer cannot distinguish (same tokens, wrong item).
+# You MUST verify the target exists in pairs.json with a big file first —
+# check with: python -c "import json; p=json.load(open('pairs.json')); ..."
+# Past examples (H-FOOD CAFE run, do NOT copy blindly):
+#   "Virgin Mojito": ("Virgin Mojito", "hotel-rajbhog-pure-veg-wanowrie"),
+#   "Veg Burger": ("Classic Veg Burger", "chai-cult-cafe-hinjawadi"),
+MANUAL_OVERRIDES = {}
 
 # --------------------------------------------------------------------------
 # Word normaliser: maps spelling variants to one canonical token so that
@@ -155,14 +187,42 @@ _group("TOMATO", "tomato", "tamatar")
 _group("BHINDI", "bhindi", "bhendi", "okra")
 _group("ROAST", "roast", "roasted", "rosted")
 _group("THALI", "thali")
+# H-FOOD CAFE cooking/texture variants.
+_group("STEAM", "steam", "steamed")
+_group("FRY", "fried", "fry")
+_group("GRILL", "grilled", "grill")
+_group("SHAKE", "shake", "shakes", "thickshake",
+        # Mastani is Pune's thick-shake-plus-ice-cream served in the same tall
+        # glass — visually a shake. Lets "Strawberry Mastani" match a real
+        # strawberry shake instead of going imageless. Signature mastanis
+        # with no flavour twin (Ceet-B/Ceet-M) still fall out as novel.
+        "mastani")
+_group("CHAI", "chai", "tea", "chay")
+_group("MOMOS", "momos", "momo")
+_group("COFFEE", "coffee", "coldbrew")
+_group("NOODLES", "noodles", "hakka")
 
 STOP = {"special", "course", "main", "red", "lal", "shree", "kala", "veg",
         "vegetarian", "jain", "bowl", "combo", "meal", "mini", "full",
-        "half", "plate", "with", "and", "spl"}
+        "half", "plate", "with", "and", "spl",
+        # H-FOOD CAFE sizes — "Cheese Pizza - Small/Medium/Large" must all
+        # match the same "Cheese Pizza" photo.
+        "small", "medium", "large", "regular", "personal", "family",
+        "classic", "combos", "style", "fresh",
+        # H-FOOD flavour/origin fillers — chai is chai, brownie is brownie.
+        "sizzling", "irani", "indori", "tulsi", "adrak",
+        # peri-peri is a flavour dust; momos/pizza photo stays correct without it.
+        "peri",
+        # "N" means "and" in dish names ("Paneer N Corn", "Fish N Chips").
+        # As a token it silently vetoed true matches (coverage 3/4 -> fail).
+        "n"}
 
 # Bonus words: if the dish name has them, a Zomato item containing them
 # ranks higher (e.g. "Butter Chapati" prefers an item with "butter").
+# H-FOOD: Schezwan pizzas must prefer PIZZA photos over Schezwan Dry.
 PREF = {
+    "Paneer Schezwan Pizza - Medium": {"pizza"},
+    "Paneer Schezwan Pizza - Large": {"pizza"},
     "Jain Dal Fry": {"jain"},
     "Butter Chapati": {"butter", "chapati", "phulka"},
     "Butter Tandoor Roti": {"butter", "tandoor"},
@@ -212,10 +272,30 @@ NONVEG_WORDS = [
 ]
 
 
+def _singular(w):
+    """Strip a trailing plural 's' (corns->corn, jalapenos->jalapeno).
+
+    Generic so future menus never need a new CANON group per word.
+    Runs AFTER canon lookup (so grouped words like chips/fries/momos are
+    already canonical and untouched) and only on lowercase tokens, so
+    canonical UPPERCASE tokens are never mangled. 'ss' endings
+    (glass, class) are left alone.
+    """
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss") and w.islower():
+        return w[:-1]
+    return w
+
+
 def toks(name):
     """Dish name -> set of canonical tokens."""
-    name = re.sub(r"\([^)]*\)", " ", name.lower())
-    return {CANON.get(w, w) for w in re.findall(r"[a-z]+", name)} - STOP
+    # Keep parenthetical words: "Irani Maska (Bun Maska)" needs bun+maska.
+    name = re.sub(r"[()]", " ", name.lower())
+    out = {_singular(CANON.get(w, w)) for w in re.findall(r"[a-z]+", name)}
+    # Drop 1-letter tokens: they are size codes ("M", "L"), initials, or
+    # split junk — never real dish words. Without this, "Ceet-M" matched a
+    # McDonald's combo via its "(M)" size tag.
+    out = {t for t in out if len(t) > 1}
+    return out - STOP
 
 
 def is_nonveg(item_name):
@@ -284,9 +364,11 @@ def harvest(out_dir, cache_dir):
             if url not in restaurants:
                 restaurants.append(url)
     restaurants += [u for u in SEED_RESTAURANTS if u not in restaurants]
+    restaurants += [u for u in CHAIN_SEEDS if u not in restaurants]
     log(f"restaurants: {len(restaurants)}")
 
     pairs = []
+    zero_menu = []
     for url in restaurants:
         slug = url.split("/")[-1]
         n = 0
@@ -294,46 +376,76 @@ def harvest(out_dir, cache_dir):
             pairs.append({"name": it["name"], "img": it["img"], "rest": slug})
             n += 1
         log(f"  {slug[:50]}: {n} imaged items")
+        if n == 0:
+            # 0 can mean closed outlet, bot-wall, or an unparseable page
+            # (e.g. review text breaking the JSON extractor). Not fatal while
+            # the pool is big, but chain seeds must never all read 0 —
+            # if they do, the pool silently loses whole dish families.
+            zero_menu.append(slug)
     (out_dir / "pairs.json").write_text(json.dumps(pairs, indent=1))
     log(f"TOTAL imaged pairs: {len(pairs)}")
+    if zero_menu:
+        log(f"WARN {len(zero_menu)} restaurants gave 0 items: {zero_menu[:12]}")
     return pairs
 
 
 # --------------------------------------------------------------------------
 # Stage 2 - MATCH
 # --------------------------------------------------------------------------
+def rank_candidates(dish, veg):
+    """All (score, pair) for one dish, best first. Shared by match + download.
+
+    Centralising the ranking here (instead of a copy in the downloader) is
+    what makes download-fallback safe: the fallback tries the SAME ordering
+    the matcher used, so it can never surface a photo the matcher rejected.
+    """
+    dt = toks(dish)
+    need_papad = "PAPAD" in toks(dish)
+    cands = []
+    for p in veg:
+        pt = toks(p["name"])
+        if not dt or not pt:
+            continue
+        if need_papad and "PAPAD" not in pt:
+            continue
+        cov = len(dt & pt) / max(len(dt), 1)   # how much of YOUR name is covered
+        if cov < 0.66:
+            continue
+        score = cov - 0.08 * len(pt - dt)      # penalise extra words
+        for w in PREF.get(dish, set()):
+            if w in p["name"].lower():
+                score += 0.3
+        cands.append((score, p))
+    cands.sort(key=lambda x: -x[0])
+    return cands
+
+
+def base_of(d):
+    # "Cheese Pizza - Small" -> "cheese pizza" so size variants share one photo.
+    return re.sub(r"\s*-\s*(small|medium|large)\s*$", "",
+                  d, flags=re.I).strip().lower()
+
+
 def match_dishes(dishes, pairs):
     """Match your dish names to Zomato items. Returns {dish: pick|None}."""
     veg = [p for p in pairs if not is_nonveg(p["name"])]
     log(f"veg pairs: {len(veg)}/{len(pairs)}")
+
     picks, used = {}, {}
     for dish in dishes:
         if dish in NOVEL_DISHES:
             picks[dish] = None
             continue
-        dt = toks(dish)
-        need_papad = "PAPAD" in toks(dish)
-        cands = []
-        for p in veg:
-            pt = toks(p["name"])
-            if not dt or not pt:
-                continue
-            if need_papad and "PAPAD" not in pt:
-                continue
-            cov = len(dt & pt) / max(len(dt), 1)   # how much of YOUR name is covered
-            if cov < 0.66:
-                continue
-            score = cov - 0.08 * len(pt - dt)      # penalise extra words
-            for w in PREF.get(dish, set()):
-                if w in p["name"].lower():
-                    score += 0.3
-            cands.append((score, p))
-        cands.sort(key=lambda x: -x[0])
-        choice = next((c for c in cands[:8] if c[1]["img"] not in used), None)
+        cands = rank_candidates(dish, veg)
+        base = base_of(dish)
+        # Size variants (Small/Medium/Large) may share one photo; different
+        # dishes never share.
+        choice = next((c for c in cands[:8]
+                       if c[1]["img"] not in used or used.get(c[1]["img"]) == base), None)
         if choice is None and cands:
             choice = cands[0]
         if choice and choice[0] >= 0.4:
-            used[choice[1]["img"]] = dish
+            used[choice[1]["img"]] = base
             picks[dish] = {"item": choice[1]["name"], "img": choice[1]["img"],
                            "rest": choice[1]["rest"], "score": round(choice[0], 2)}
         else:
@@ -382,7 +494,7 @@ def upload_imgbb(jpeg_bytes, name, api_key):
 # --------------------------------------------------------------------------
 # Stage 5 - BUILD SmartBiz sheet
 # --------------------------------------------------------------------------
-def build_sheet(menu_excel, template, out_dir, results):
+def build_sheet(menu_excel, template, out_dir, results, sku_prefix="SKU"):
     menu_wb = openpyxl.load_workbook(menu_excel, data_only=True)
     rows = list(menu_wb.active.iter_rows(values_only=True))
     items = [{"name": str(r[0]).strip(), "desc": str(r[2] or "").strip(),
@@ -394,7 +506,7 @@ def build_sheet(menu_excel, template, out_dir, results):
     wb = openpyxl.load_workbook(out_xlsx)
     ws = wb["bulk_upload_template"]
     for i, it in enumerate(items, start=1):
-        sku = f"GEV-{i:03d}"
+        sku = f"{sku_prefix}-{i:03d}"
         link = results.get(sku, {}).get("imgbb", "")
         if not link:                      # novel items stay out of the clean file
             continue
@@ -408,7 +520,9 @@ def build_sheet(menu_excel, template, out_dir, results):
         ws.cell(row=r, column=9, value=it["desc"][:2000])
         ws.cell(row=r, column=16, value=link)
     # Drop imageless rows so the file is 100% upload-ready.
-    for row in range(ws.max_row, 1, -1):
+    # Only scan the filled block (rows 2..1+len(items)) — never ws.max_row
+    # (49000 validation rows; deleting those takes forever).
+    for row in range(len(items) + 1, 1, -1):
         if ws.cell(row=row, column=4).value and not ws.cell(row=row, column=16).value:
             ws.delete_rows(row)
     wb.save(out_xlsx)
@@ -417,17 +531,59 @@ def build_sheet(menu_excel, template, out_dir, results):
     shutil.copy(template, pending)
     wb2 = openpyxl.load_workbook(pending)
     ws2 = wb2["bulk_upload_template"]
-    for row in range(ws2.max_row, 1, -1):
-        ws2.delete_rows(row)
+    # Write novel rows directly at the top (rows 2..); leftover template
+    # validation rows stay empty and are ignored by Amazon. No mass deletes.
+    pr = 2
     for i, it in enumerate(items, start=1):
-        sku = f"GEV-{i:03d}"
+        sku = f"{sku_prefix}-{i:03d}"
         if results.get(sku, {}).get("imgbb"):
             continue
-        ws2.append([None, None, sku, it["name"][:200], it["price"], it["price"],
-                    "FOOD_AND_GROCERY", "Other Food and Grocery",
-                    it["desc"][:2000]] + [None] * 11)
+        ws2.cell(row=pr, column=3, value=sku)
+        ws2.cell(row=pr, column=4, value=it["name"][:200])
+        ws2.cell(row=pr, column=5, value=it["price"])
+        ws2.cell(row=pr, column=6, value=it["price"])
+        ws2.cell(row=pr, column=7, value="FOOD_AND_GROCERY")
+        ws2.cell(row=pr, column=8, value="Other Food and Grocery")
+        ws2.cell(row=pr, column=9, value=it["desc"][:2000])
+        pr += 1
     wb2.save(pending)
     return out_xlsx, pending
+
+
+def diagnose_misses(dishes, pairs, picks):
+    """Future-proof diagnostic: for every unmatched dish, report near-misses.
+
+    The Paneer-N-Corn outage was silent — match just said "78/101" with no
+    hint whether the pool lacked the dish or the matcher rejected it.
+    - Zero near-misses (pool items covering >=50% of the dish name):
+      the POOL lacks the dish family -> add CHAIN_SEEDS for that cuisine.
+    - Near-misses exist but score < 0.4 / coverage < 0.66:
+      the MATCHER rejects true photos -> fix toks/STOP/CANON (plurals,
+      "N"=and, origin words) instead of adding restaurants.
+    """
+    veg = [p for p in pairs if not is_nonveg(p["name"])]
+    for dish in dishes:
+        if picks.get(dish):
+            continue
+        if dish in NOVEL_DISHES:
+            log(f"  NOVEL-banned: {dish}")
+            continue
+        dt = toks(dish)
+        near = []
+        for p in veg:
+            pt = toks(p["name"])
+            if not dt or not pt:
+                continue
+            cov = len(dt & pt) / max(len(dt), 1)
+            if cov >= 0.5:
+                score = cov - 0.08 * len(pt - dt)
+                near.append((score, p))
+        near.sort(key=lambda x: -x[0])
+        if not near:
+            log(f"  POOL-GAP (no pool item covers half the name): {dish} toks={sorted(dt)}")
+        else:
+            top = "; ".join(f"{s:.2f} {q['name'][:45]}" for s, q in near[:3])
+            log(f"  MATCHER-GAP (pool has candidates, all rejected): {dish} toks={sorted(dt)} :: {top}")
 
 
 def main():
@@ -436,7 +592,12 @@ def main():
     ap.add_argument("--template", required=True, help="Amazon SmartBiz bulk upload template .xlsx")
     ap.add_argument("--out", default="./smartbiz_out", help="Output folder")
     ap.add_argument("--stage", default="all", choices=["all", "harvest", "match", "download", "build"])
+    ap.add_argument("--sku-prefix", default="SKU",
+                    help="SKU prefix per vendor, e.g. HFC gives HFC-001. "
+                         "Use 2-4 uppercase letters of the vendor name.")
     args = ap.parse_args()
+
+    sku_prefix = re.sub(r"[^A-Za-z0-9]", "", args.sku_prefix).upper()[:6] or "SKU"
 
     api_key = __import__("os").environ.get("IMGBB_API_KEY", "")
     if not api_key and args.stage in ("all", "download"):
@@ -453,42 +614,145 @@ def main():
 
     if args.stage in ("all", "harvest"):
         harvest(out_dir, cache_dir)
+    if args.stage == "harvest":
+        log("HARVEST done.")
+        return
     pairs = json.loads((out_dir / "pairs.json").read_text())
 
     if args.stage in ("all", "match"):
         picks = match_dishes(dishes, pairs)
         (out_dir / "picks.json").write_text(json.dumps(picks, indent=1))
         log(f"matched {sum(1 for v in picks.values() if v)}/{len(picks)}")
+        diagnose_misses(dishes, pairs, picks)
+    if args.stage == "match":
+        log("MATCH done.")
+        return
     picks = json.loads((out_dir / "picks.json").read_text())
 
     if args.stage in ("all", "download"):
-        results, idx_of = {}, {d: i + 1 for i, d in enumerate(dishes)}
-        for dish, pick in picks.items():
-            sku = f"GEV-{idx_of[dish]:03d}"
-            if not pick:
-                results[sku] = {"name": dish, "imgbb": ""}
-                continue
+        prev = {}
+        _rf = out_dir / "results.json"
+        if _rf.exists():
             try:
-                got = download_image(pick["img"])
+                prev = json.loads(_rf.read_text())
+            except Exception:
+                prev = {}
+        results, picks = run_download(dishes, picks, pairs, out_dir, api_key,
+                                      sku_prefix, prev)
+        (out_dir / "results.json").write_text(json.dumps(results, indent=1))
+        (out_dir / "picks.json").write_text(json.dumps(picks, indent=1))
+def run_download(dishes, picks, pairs, out_dir, api_key, sku_prefix="SKU",
+                 prev=None, progress=None):
+    """Download + ImageBB-upload every matched pick. Shared by CLI and app.
+
+    - Idempotent: previous uploads whose pick didn't change are KEPT.
+    - Fallback: a top pick that fails the quality gate is retried with the
+      next matcher-approved candidates (same ranking as match).
+    - progress(done, total, msg): optional callback for UIs (Streamlit).
+      Returns (results, picks); picks may be updated by fallback/applied
+      manual overrides, so callers must persist both.
+    """
+    out_dir = Path(out_dir)
+    (out_dir / "zimages").mkdir(parents=True, exist_ok=True)
+    results, idx_of = {}, {d: i + 1 for i, d in enumerate(dishes)}
+    prev = prev or {}
+    imgbb_cache = {}  # zomato img url -> (imgbb link, "WxH")
+    veg = [p for p in pairs if not is_nonveg(p["name"])]
+    dl_failed = set()  # zomato imgs that failed the quality gate this run
+    total = len(picks)
+    for n, (dish, pick) in enumerate(picks.items(), start=1):
+        sku = f"{sku_prefix}-{idx_of[dish]:03d}"
+        if not pick:
+            results[sku] = {"name": dish, "imgbb": ""}
+            if progress:
+                progress(n, total, f"{sku} novel — no photo")
+            continue
+        old = prev.get(sku, {})
+        if old.get("imgbb") and old.get("img") == pick["img"]:
+            results[sku] = old
+            if old.get("size"):
+                imgbb_cache.setdefault(pick["img"], (old["imgbb"], old["size"]))
+            log(sku, "KEEP", old["imgbb"])
+            if progress:
+                progress(n, total, f"{sku} kept")
+            continue
+        # Skip re-downloading a pick that already failed this run or in a
+        # previous run (recorded as dl_fail) — go straight to fallback.
+        tried = {pick["img"]} if old.get("dl_fail") and old.get("img") == pick["img"] else set()
+        tried |= {i for i in dl_failed}
+        done = False
+        try:
+            cands = [(pick["score"] if pick.get("score") else 1.0,
+                      {"name": pick["item"], "img": pick["img"],
+                       "rest": pick["rest"]})]
+            # Fallback: SAME ranking the matcher used, so we only ever
+            # try photos the matcher approved (score >= 0.4).
+            for score, p in rank_candidates(dish, veg)[:12]:
+                if score < 0.4:
+                    break
+                entry = (score, {"name": p["name"], "img": p["img"],
+                                 "rest": p["rest"]})
+                if entry not in cands:
+                    cands.append(entry)
+            for score, cand in cands:
+                if cand["img"] in tried or cand["img"] in dl_failed:
+                    continue
+                if cand["img"] in imgbb_cache:
+                    link, sizestr = imgbb_cache[cand["img"]]
+                    results[sku] = {"name": dish, "item": cand["name"],
+                                    "img": cand["img"], "rest": cand["rest"],
+                                    "score": round(score, 2),
+                                    "size": sizestr, "imgbb": link,
+                                    "shared": True}
+                    picks[dish] = {"item": cand["name"], "img": cand["img"],
+                                   "rest": cand["rest"],
+                                   "score": round(score, 2)}
+                    log(sku, "OK-shared", link)
+                    done = True
+                    break
+                got = download_image(cand["img"])
                 if not got:
-                    results[sku] = {"name": dish, **pick, "imgbb": ""}
+                    tried.add(cand["img"])
+                    dl_failed.add(cand["img"])
+                    log(sku, "reject-small", cand["name"][:40], f"{score:.2f}")
                     continue
                 jpeg, size = got
                 (out_dir / "zimages" / f"{sku}.jpg").write_bytes(jpeg)
                 slug = re.sub(r"[^a-z0-9]+", "-", dish.lower()).strip("-")[:45]
                 link = upload_imgbb(jpeg, f"{sku}-{slug}", api_key)
-                results[sku] = {"name": dish, **pick,
-                                "size": f"{size[0]}x{size[1]}", "imgbb": link}
-                log(sku, "OK", link)
-            except Exception as e:  # noqa: BLE001 - keep going, log the miss
-                log(sku, "FAIL", str(e)[:100])
-                results[sku] = {"name": dish, **pick, "imgbb": ""}
-            time.sleep(0.5)
-        (out_dir / "results.json").write_text(json.dumps(results, indent=1))
+                sizestr = f"{size[0]}x{size[1]}"
+                imgbb_cache[cand["img"]] = (link, sizestr)
+                results[sku] = {"name": dish, "item": cand["name"],
+                                "img": cand["img"], "rest": cand["rest"],
+                                "score": round(score, 2),
+                                "size": sizestr, "imgbb": link}
+                picks[dish] = {"item": cand["name"], "img": cand["img"],
+                               "rest": cand["rest"], "score": round(score, 2)}
+                log(sku, "OK" if cand["img"] == pick["img"] else "OK-fallback",
+                    link)
+                done = True
+                break
+            if not done:
+                results[sku] = {"name": dish, **pick, "imgbb": "",
+                                "dl_fail": True}
+                log(sku, "FAIL-all-candidates", dish)
+        except Exception as e:  # noqa: BLE001 - keep going, log the miss
+            log(sku, "FAIL", str(e)[:100])
+            results[sku] = {"name": dish, **pick, "imgbb": ""}
+        if progress:
+            progress(n, total, f"{sku} {'done' if done else 'no photo'}")
+        time.sleep(0.5)
+    return results, picks
+
+
+    if args.stage == "download":
+        log("DOWNLOAD done.")
+        return
     results = json.loads((out_dir / "results.json").read_text())
 
     if args.stage in ("all", "build"):
-        ready, pending = build_sheet(args.menu_excel, args.template, out_dir, results)
+        ready, pending = build_sheet(args.menu_excel, args.template, out_dir,
+                                     results, sku_prefix)
         novel = [v["name"] for v in results.values() if not v.get("imgbb")]
         (out_dir / "novel_list.txt").write_text("\n".join(sorted(novel)))
         log(f"READY: {ready} | PENDING: {pending} | NOVEL: {len(novel)}")
