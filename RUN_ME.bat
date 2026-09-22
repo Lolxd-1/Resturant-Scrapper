@@ -67,7 +67,19 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM ---- 4. Launch ----
+REM ---- 4. Already running? (double-clicked twice, or leftover server) ----
+set APPUP=no
+for /f %%i in ('powershell -NoProfile -Command "try { (Invoke-WebRequest -Uri 'http://localhost:8501/_stcore/health' -TimeoutSec 4).StatusCode } catch { 'down' }"') do set APPUP=%%i
+if "%APPUP%"=="200" (
+  echo.
+  echo App is ALREADY running. Opening it in your browser...
+  start "" "http://localhost:8501"
+  echo If the page does not load, close other black windows and retry.
+  pause
+  exit /b 0
+)
+
+REM ---- 5. Launch ----
 echo.
 echo [2/2] Starting the app - a browser tab opens automatically.
 echo Keep this window OPEN while you use the app. Close it to stop.
