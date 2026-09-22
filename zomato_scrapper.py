@@ -465,12 +465,35 @@ def match_dishes(dishes, pairs):
 # --------------------------------------------------------------------------
 # Stage 3 - DOWNLOAD + Stage 4 - UPLOAD
 # --------------------------------------------------------------------------
-def download_image(url, min_side=450, max_side=1600):
-    r = requests.get(url, headers=UA, timeout=25)
-    if r.status_code != 200 or len(r.content) < 25000:
+def download_image(url, min_side=450, max_side=1600, tries=3):
+    """Fetch + validate a dish photo. Retries with backoff: a single network
+    blip must never silently zero out a whole vendor run (that exact outage
+    emptied a 5-dish demo sheet once — every download failed inside one bad
+    minute while matching was 5/5). Returns None only if all tries fail."""
+    last = None
+    content = None
+    for attempt in range(tries):
+        try:
+            r = requests.get(url, headers=UA, timeout=25)
+            if r.status_code == 200 and len(r.content) >= 25000:
+                content = r.content
+                break
+        except Exception as e:  # noqa: BLE001 - retry, record last error
+            last = e
+        if attempt < tries - 1:
+            time.sleep(2 * (attempt + 1))
+    if content is None:
+        # Quality-gate rejects (short/blocked responses) fail fast with NO
+        # log spam; only real network errors on every try get logged, since
+        # those signal trouble (dead network) rather than a bad photo.
+        if last is not None:
+            log("download failed after retries:", url[:70], str(last)[:80])
         return None
-    img = Image.open(BytesIO(r.content))
-    img.load()
+    try:
+        img = Image.open(BytesIO(content))
+        img.load()
+    except Exception:
+        return None
     if min(img.size) < 400:
         return None
     img = img.convert("RGB")
@@ -481,14 +504,22 @@ def download_image(url, min_side=450, max_side=1600):
     return buf.getvalue(), img.size
 
 
-def upload_imgbb(jpeg_bytes, name, api_key):
-    r = requests.post(IMGBB_URL, data={"key": api_key, "name": name},
-                      files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
-                      timeout=60)
-    j = r.json()
-    if not j.get("success"):
-        raise RuntimeError(str(j)[:200])
-    return j["data"].get("display_url") or j["data"].get("url")
+def upload_imgbb(jpeg_bytes, name, api_key, tries=3):
+    last = None
+    for attempt in range(tries):
+        try:
+            r = requests.post(IMGBB_URL, data={"key": api_key, "name": name},
+                              files={"image": ("img.jpg", jpeg_bytes, "image/jpeg")},
+                              timeout=60)
+            j = r.json()
+            if not j.get("success"):
+                raise RuntimeError(str(j)[:200])
+            return j["data"].get("display_url") or j["data"].get("url")
+        except Exception as e:  # noqa: BLE001 - retry, record last error
+            last = e
+            if attempt < tries - 1:
+                time.sleep(2 * (attempt + 1))
+    raise RuntimeError(f"ImageBB upload failed after {tries} tries: {str(last)[:120]}")
 
 
 # --------------------------------------------------------------------------

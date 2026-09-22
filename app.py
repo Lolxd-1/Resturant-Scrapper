@@ -175,11 +175,31 @@ if run_btn:
             novel = sorted(v["name"] for v in results.values()
                            if not v.get("imgbb"))
             (workdir / "novel_list.txt").write_text("\n".join(novel))
+            # Persisted for diagnosis: if a run ever yields an empty sheet,
+            # these files say exactly which stage failed (match vs download).
+            (workdir / "picks.json").write_text(json.dumps(picks, indent=1))
+            (workdir / "results.json").write_text(json.dumps(results, indent=1))
+
+        n_ok = sum(1 for v in results.values() if v.get("imgbb"))
+        if n_ok == 0:
+            # Never present empty sheets as success: every photo failed,
+            # which means network/ImageBB trouble, not a bad menu.
+            st.error(
+                "ZERO photos downloaded — the READY sheet would be empty, so "
+                "it was NOT offered. This means every download/upload failed "
+                "(usually a network drop or a wrong ImageBB key), NOT that "
+                "your dishes lack photos. Check your internet, verify the "
+                "key at https://api.imgbb.com/, and press Run again — "
+                "re-runs resume cheaply and never duplicate uploads.")
+            failed = [d for d in dish_names if not results.get(
+                f"{prefix}-{dish_names.index(d) + 1:03d}", {}).get("imgbb")]
+            st.write("Failed dishes:", failed)
+            st.stop()
 
         st.session_state["ready_bytes"] = Path(ready_path).read_bytes()
         st.session_state["pending_bytes"] = Path(pending_path).read_bytes()
         st.session_state["novel_text"] = "\n".join(novel)
-        st.session_state["summary"] = (matched, len(picks), len(novel))
+        st.session_state["summary"] = (n_ok, len(picks), len(novel))
         st.session_state["table"] = [
             {"SKU": f"{prefix}-{i + 1:03d}", "Dish": d,
              "Photo": (picks[d]["item"] if picks.get(d) else "— no photo —"),
@@ -196,7 +216,7 @@ if run_btn:
 if st.session_state.get("done"):
     matched, total, n_novel = st.session_state["summary"]
     st.success(f"Done: **{matched}/{total}** dishes with photos, "
-               f"**{n_novel}** honestly imageless (see PENDING file).")
+               f"**{n_novel}** honestly imageless.")
     fname_base = re.sub(r"[^A-Za-z0-9]+", "_", vendor).strip("_") or "vendor"
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -205,14 +225,23 @@ if st.session_state.get("done"):
                            file_name=f"{fname_base}_smartbiz_UPLOAD_READY.xlsx",
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     with c2:
-        st.download_button("Download NOVEL-PENDING sheet",
-                           st.session_state["pending_bytes"],
-                           file_name=f"{fname_base}_smartbiz_NOVEL_PENDING.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        if n_novel:
+            st.download_button("Download NOVEL-PENDING sheet",
+                               st.session_state["pending_bytes"],
+                               file_name=f"{fname_base}_smartbiz_NOVEL_PENDING.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else:
+            st.info("No imageless dishes — nothing pending.")
     with c3:
-        st.download_button("Download novel list (.txt)",
-                           st.session_state["novel_text"],
-                           file_name=f"{fname_base}_novel_list.txt")
+        if n_novel:
+            st.download_button("Download novel list (.txt)",
+                               st.session_state["novel_text"],
+                               file_name=f"{fname_base}_novel_list.txt")
+    with st.expander("Per-dish match table"):
+        st.dataframe(st.session_state["table"], use_container_width=True)
+    st.warning("Spot-check the photos before uploading to Amazon — a wrong photo "
+               "is worse than no photo. Imageless rows are in the PENDING file: "
+               "shoot real kitchen photos for those.")
     with st.expander("Per-dish match table"):
         st.dataframe(st.session_state["table"], use_container_width=True)
     st.warning("Spot-check the photos before uploading to Amazon — a wrong photo "
