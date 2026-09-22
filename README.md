@@ -17,7 +17,19 @@ YOUR MENU EXCEL
 └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └──────────────┘
 ```
 
-## Use it (team web app — no install)
+## Use it (any Windows PC — 3 steps, no tech skills)
+
+1. Install Python once: https://www.python.org/downloads/
+   (tick **"Add python.exe to PATH"** on the first screen).
+2. GitHub repo page → green **Code** button → **Download ZIP** → extract it.
+3. Double-click **`RUN_ME.bat`** → browser opens the app automatically.
+
+Then: type vendor name → upload menu Excel → paste ImageBB key →
+**Run pipeline** → download the two sheets. Keep the black window open
+while using it; close it to stop. A ~100-dish run takes 10–20 minutes
+(progress bar shows it working — that is normal, not frozen).
+
+## Use it (hosted Streamlit URL — same app, no PC needed)
 
 1. Open the Streamlit app URL (see Deployment below).
 2. Type vendor name (SKU prefix auto-derives, editable — `HFC-001`…).
