@@ -41,3 +41,4 @@
 - 2026-09-27T14:54:52Z Final review (opus) CHANGES_REQUIRED: 2 critical (swap races), 8 important, 11 minor. Ruling: split the single fix wave into FIX1/FIX2/FIX3 — executors repeatedly hit the 60-turn cap on large briefs — cost if wrong: 2 extra dispatches. Re-eval 305/330 (92.4%). dispatch FIX1 (opus)
 - 2026-09-27T14:58:44Z EVAL done: 305/330 covered, 1 wrong, 2 borderline (evidence reports/eval.md).
 - 2026-09-27T15:03:40Z FIX1 PASS. dispatch FIX2 (sonnet). LPP-008 residual added to FIX3 Notes.
+- 2026-09-27T15:30:18Z FIX2 PASS. dispatch FIX3 (opus)

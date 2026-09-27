@@ -38,8 +38,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T15 Eval tool — o16 — done 3f43ca5..470b6f8 (gate PASS)
 - [x] EVAL — 305/330 (92.4%) coverage, 1 wrong + 2 borderline of 305 (99.7% precision); evidence .orchestrator/reports/eval.md
 - [x] FIX1 Swap/rebuild concurrency, honest downloads — done 002d647..d8cd1fc (gate PASS)
-- [~] FIX2 Robustness (discovery exceptions, transient bad-image marks, used_images, column priority, url validation, atomic writes) — deps FIX1
-- [ ] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — deps FIX2
+- [x] FIX2 Robustness — done 11bdfc0..b45cc29 (gate PASS; resumed twice after maxTurns)
+- [~] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — deps FIX2
 - [ ] FINAL verify-all, final review, FIX1, push prodv2.0
 
 ## Open questions
