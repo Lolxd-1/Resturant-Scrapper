@@ -82,8 +82,8 @@ def test_tc9_proteins_and_diet():
 
 
 def test_tc10_non_latin_and_accents():
-    q = parse_dish("पनीर टिक्का")
-    assert q.display == "पनीर टिक्का"
+    q = parse_dish("பனீர் டிக்கா")  # Tamil: no transliteration, so nothing to match on
+    assert q.display == "பனீர் டிக்கா"
     assert q.variants == (frozenset(),)
     assert normalize("Crème Brûlée") == "creme brulee"
 
@@ -171,3 +171,14 @@ def test_tune2_tc4_dish_head_from_own_category():
     assert parse_dish("Garden Special", "Pizzas").head == "PIZZA"
     assert parse_dish("Garlic Bread", "Pizza").head == "GARLICBREAD"
     assert parse_dish("Farmhouse", "Beverages").head is None
+
+
+def test_s1_tc6_devanagari_dish_is_read():
+    q = parse_dish("चिकन हंडी (हाफ)", "Nonveg Danka")
+    assert q.proteins == frozenset({"CHICKEN"})
+    assert q.diet == "nonveg"
+    assert q.display == "चिकन हंडी (हाफ)"
+    assert q.base_key == parse_dish("चिकन हंडी (फुल)").base_key
+    assert parse_dish("x", display="Vendor Name").display == "Vendor Name"
+    assert parse_dish("Paneer Masala", "Shakahari Danka").diet == "veg"
+    assert parse_dish("Special Thali", "Mansahari Thali").diet == "nonveg"

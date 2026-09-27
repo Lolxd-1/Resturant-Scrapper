@@ -55,6 +55,7 @@ class PoolIndex:
         self._pos: dict[int, int] = {}
         self._postings: dict[str, list[int]] = defaultdict(list)
         self._median_idf: float | None = None
+        self._word_counts: dict[str, int] | None = None
         self.add(items)
 
     def add(self, items: Iterable[PoolItem]) -> None:
@@ -67,6 +68,7 @@ class PoolIndex:
             for t in toks:
                 self._postings[t].append(pos)
         self._median_idf = None
+        self._word_counts = None
 
     def __len__(self) -> int:
         return len(self._items)
@@ -82,6 +84,16 @@ class PoolIndex:
 
     def idf(self, token: str) -> float:
         return self._idf_of_df(len(self._postings.get(token, ())))
+
+    def word_counts(self) -> dict[str, int]:
+        """Lowercase raw words of item names -> number of items using them."""
+        if self._word_counts is None:
+            counts: dict[str, int] = defaultdict(int)
+            for item in self._items:
+                for word in set(normalize(item.name).split()):
+                    counts[word] += 1
+            self._word_counts = dict(counts)
+        return self._word_counts
 
     def median_idf(self) -> float:
         """idf of the median token occurrence: half of all item tokens are at least this common."""
@@ -204,7 +216,7 @@ def score(q: DishQuery, item: PoolItem, idf: Callable[[str], float]) -> MatchSco
         return _reject("combo")
     owner = getattr(idf, "__self__", None)
     median = owner.median_idf() if isinstance(owner, PoolIndex) else None
-    ratio = fuzz.token_set_ratio(normalize(q.display), normalize(item.name)) / 100
+    ratio = fuzz.token_set_ratio(normalize(q.raw), normalize(item.name)) / 100
     results = [_score_variant(q, v, facts, ratio, idf, median) for v in q.variants]
     passed = [s for s in results if s.tier != "reject"]
     return min(passed, key=_order) if passed else results[0]
@@ -236,7 +248,7 @@ def same_dish_menu_match(q: DishQuery, items: Iterable[PoolItem],
     ranked = rank(q, items, idf)
     if ranked and ranked[0].score.tier in ("exact", "strong"):
         return ranked[0]
-    name = normalize(q.display)
+    name = normalize(q.raw)
     best, best_ratio = None, 0.0
     for item in items:
         ratio = fuzz.token_sort_ratio(name, normalize(item.name))

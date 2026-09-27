@@ -120,6 +120,7 @@ def test_tc4_transliterate():
     assert transliterate("मालवाणी चिकन ड्राय हंडी (फुल)") == "malvani chicken dry handi (full)"
     assert transliterate("व्हेज थाळी") == "veg thali"
     assert transliterate("स्पे. चिकन थाळी") == "special chicken thali"
+    assert transliterate("पनीर टिक्का") == "paneer tikka"
     unknown = transliterate("गावकरी")
     assert unknown and unknown.isascii() and unknown.isalpha()
     assert transliterate("Butter Naan (Half)") == "Butter Naan (Half)"

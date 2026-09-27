@@ -378,15 +378,15 @@ def test_distinct_images(tmp_path):
 def test_unicode_menu_end_to_end(tmp_path):
     env = Env(tmp_path)
     env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1")])
-    menu = env.menu([["पनीर टिक्का", "Main Course", "घर का स्वाद", 220],
+    menu = env.menu([["பனீர் டிக்கா", "Main Course", "घर का स्वाद", 220],
                      ["Cheese Pizza", "Pizza", "Loaded with cheese ₹ 199 😋", 199]])
 
     env.run(menu, JobOptions(vendor="Café Désí", live_search=False))
 
     assert load_job(tmp_path / "job1")["status"] == "done"
     res = env.results()
-    assert res["पनीर टिक्का"]["status"] == "needs_photo"
-    assert res["पनीर टिक्का"]["reason"] == "Name is not in English letters — add an English name"
+    assert res["பனீர் டிக்கா"]["status"] == "needs_photo"
+    assert res["பனீர் டிக்கா"]["reason"] == "Name is not in English letters — add an English name"
     assert res["Cheese Pizza"]["status"] == "ready"
     for kind in ("UPLOAD_READY", "PENDING"):
         sheet(env, "Café Désí", kind)
@@ -445,6 +445,23 @@ def test_blank_categories_inferred(tmp_path):
     env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
 
     assert col(sheet(env, "Test Cafe", "UPLOAD_READY"), "H", 2) == ["Pizza", "Beverages"]
+
+
+# ---- S1 TC7: a phonetic spelling is read before matching; the sheet keeps what the vendor wrote ----
+
+def test_s1_tc7_misspelled_dish_is_read_and_kept(tmp_path):
+    env = Env(tmp_path)
+    env.pool("naan-house", [("Butter Naan", "Breads", "veg", "naan1")])
+    menu = env.menu([["BATER NAN", "Roti", "", 40]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    assert env.results()["BATER NAN"]["status"] == "ready"
+    assert col(sheet(env, "Test Cafe", "UPLOAD_READY"), "D", 1) == ["BATER NAN"]
+    messages = [e["message"] for e in env.events if e["type"] == "log"]
+    assert "Read 'BATER NAN' as 'butter naan'" in messages
+    log_txt = (tmp_path / "job1" / "log.txt").read_text(encoding="utf-8")
+    assert "Read 'BATER NAN' as 'butter naan'" in log_txt
 
 
 # ---- TC13: a veg dish never takes a non-veg photo ----

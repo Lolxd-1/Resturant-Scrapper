@@ -80,7 +80,9 @@ def _transliterate_run(run: str) -> str:
         if pending_a:
             pending_a = False
             if ch == _VIRAMA or ch in _DEV_SIGNS:
-                out.append(_DEV_SIGNS.get(ch, ""))
+                nxt = run[i + 1:i + 2]
+                # a word-final long "aa" is written "a" in menus ("टिक्का" -> "tikka")
+                out.append("a" if ch == "ा" and not (nxt and _in_word(nxt)) else _DEV_SIGNS.get(ch, ""))
                 continue
             out.append("a")
         if ch in _DEV_CONSONANTS:

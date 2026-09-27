@@ -126,7 +126,7 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "TACO": ("taco", "tacos"),
     "HANDI": ("handi",),
     # a curry in a bowl: "X Curry", "X Rassa", "X Gravy", "X Kalwan" look the same (not a head)
-    "CURRY": ("curry", "curries", "rassa", "gravy", "kalwan"),
+    "CURRY": ("curry", "curries", "rassa", "gravy", "kalwan", "kari", "karri"),
 }
 
 SYNONYMS: dict[str, str] = {w: canon for canon, words in _SYNONYM_GROUPS.items() for w in words}
@@ -178,6 +178,9 @@ PHRASES: dict[str, str] = {
     "dahi vati": "CURD",
     "boiled egg": "BOILEDEGG",
     "boiled eggs": "BOILEDEGG",
+    "boiled anda": "BOILEDEGG",
+    "boil anda": "BOILEDEGG",
+    "white rice": "plain rice",
     "paneer tikka": "PANEER TIKKA",
     "soya chunks": "SOYA",
     "soyabean chunks": "SOYA",
@@ -513,5 +516,8 @@ CATEGORY_HEAD_HINTS: dict[str, str] = {
 # normalized words / phrases hinting diet (matched whole-word on name + category)
 DIET_HINTS_NONVEG: frozenset[str] = frozenset({
     "non veg", "nonveg", "non vegetarian", "chicken", "mutton", "seafood", "sea food", "fish",
+    "mansahari", "maansahari",
 })
-DIET_HINTS_VEG: frozenset[str] = frozenset({"veg", "jain", "pure veg", "paneer", "vegetarian"})
+DIET_HINTS_VEG: frozenset[str] = frozenset({
+    "veg", "jain", "pure veg", "paneer", "vegetarian", "shakahari", "shaakahari",
+})

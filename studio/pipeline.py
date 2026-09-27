@@ -36,6 +36,7 @@ from studio.models import (
     dish_result_from_dict,
     dish_result_to_dict,
 )
+from studio.spelling import Speller
 from studio.store import PoolStore
 from studio.text import normalize, parse_dish, size_base_key
 from studio.vision import (
@@ -79,6 +80,7 @@ BLOCKED_MESSAGE = "Zomato is limiting requests from this PC; continuing with pho
 NO_KEY_MESSAGE = "No ImgBB API key saved. Add one in Settings."
 FALLBACK_CITIES = ("pune", "mumbai", "ncr", "bangalore")
 MAX_SOURCE_OUTLETS = 25
+_READ_AS_LOG_CAP = 200
 DEFAULT_CUISINES = ("north-indian", "street-food", "fast-food")
 SEARCH_ROUNDS = ((0, 3), (3, 8), (8, 20))
 _TIER_RANK = {"exact": 0, "strong": 1, "close": 2}
@@ -501,8 +503,16 @@ class _Run:
         self.warnings += parsed.warnings
         prefix = re.sub(r"[^A-Z0-9]", "", self.opts.sku_prefix.upper())[:6] or derive_sku_prefix(self.opts.vendor)
         by_key: dict[str, _Group] = {}
+        speller = Speller(self.engine.index.word_counts())
+        self.say(f"Spelling helper ready: {len(speller.vocab)} words")
+        read_as: set[str] = set()
         for row in parsed.rows:
-            q = parse_dish(row.name, row.category, row.description)
+            fixed = speller.fix_text(row.name)
+            changed = fixed != " ".join(row.name.lower().split())
+            if changed and row.name not in read_as and len(read_as) < _READ_AS_LOG_CAP:
+                read_as.add(row.name)
+                self.say(f"Read '{row.name}' as '{fixed}'")
+            q = parse_dish(fixed, speller.fix_text(row.category), row.description, display=row.name)
             r = DishResult(row=row.row, sku=f"{prefix}-{row.row:03d}", name=row.name,
                            category=row.category or infer_category(q), description=row.description,
                            price=row.price)
@@ -739,7 +749,7 @@ class _Run:
             margins = head_margin(vision, mat, g.q.head)
             keep_head = _head_keep(margins, [c.score.tier for c in survivors])
             cons = consensus(mat, np.array([c.score.text for c in survivors]))
-            ts = text_sim(vision, mat, g.q.display)
+            ts = text_sim(vision, mat, g.q.raw)
             for j, c in enumerate(survivors):
                 # The vendor's own/chain menu names this exact dish, so only a clear mismatch vetoes it.
                 own_menu = c.source in ("own", "chain")

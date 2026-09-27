@@ -18,6 +18,7 @@ from studio.lexicon import (
     SYNONYMS,
 )
 from studio.models import DishQuery
+from studio.spelling import fold_homoglyphs, transliterate
 
 _BASES = frozenset({
     "PANEER", "SOYA", "CHAAP", "MUSHROOM", "ALOO", "GOBI", "CORN", "MATAR", "PALAK", "BHINDI",
@@ -43,7 +44,7 @@ _SIZE_TAIL_RE = re.compile(
 
 
 def normalize(text: str) -> str:
-    folded = unicodedata.normalize("NFKD", text or "")
+    folded = unicodedata.normalize("NFKD", transliterate(fold_homoglyphs(text or "")))
     s = "".join(c for c in folded if not unicodedata.combining(c)).lower()
     s = s.replace("&", " and ").replace("+", " plus ")
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
@@ -202,7 +203,7 @@ def _diet(proteins: frozenset[str], toks: list[str], name: str, category: str) -
     return "unknown"
 
 
-def parse_dish(name: str, category: str = "", description: str = "") -> DishQuery:
+def parse_dish(name: str, category: str = "", description: str = "", *, display: str | None = None) -> DishQuery:
     main_text, parens = _split_parens(name)
     main = _tokens(main_text, fallback=True)
     aliases: list[list[str]] = []
@@ -226,7 +227,7 @@ def parse_dish(name: str, category: str = "", description: str = "") -> DishQuer
     proteins = _proteins(name_toks)
     return DishQuery(
         raw=name,
-        display=" ".join(name.split()),
+        display=" ".join((name if display is None else display).split()),
         base_key=size_base_key(name),
         variants=tuple(dict.fromkeys(variants)),
         head=item_head(name, category),
