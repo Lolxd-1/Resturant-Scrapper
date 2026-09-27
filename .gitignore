@@ -33,5 +33,4 @@ outputs/
 .venv/
 *.tmp
 *.bad
-!tests/fixtures/**
 !data/seed_pool.jsonl.gz
