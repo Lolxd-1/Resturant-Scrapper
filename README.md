@@ -103,6 +103,13 @@ After a run, in `outputs/<job>/` you get:
 - **Antivirus warnings** — the setup script downloads `uv` (a small,
   official Python installer tool) from GitHub; if your antivirus blocks it,
   allow `scripts\setup.ps1` and `RUN_ME.bat`, or ask IT to allowlist them.
+- **"Visual check needs the Microsoft VC++ runtime" / "Logo check
+  unavailable"** — the photo checks need the Microsoft Visual C++ runtime.
+  `RUN_ME.bat` installs it for you (click Yes when Windows asks to install a
+  Microsoft component). If that was skipped, install
+  https://aka.ms/vs/17/release/vc_redist.x64.exe and run `RUN_ME.bat` again.
+  Until then the app matches dishes by name only and skips photos from big
+  chains.
 - **"Zomato is limiting requests"** — Zomato is rate-limiting this network;
   wait a while and re-run, or try from a different connection.
 - **Reset everything** — close the app, delete the folder

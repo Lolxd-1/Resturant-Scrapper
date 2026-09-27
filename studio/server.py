@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import io
 import json
 import logging
@@ -50,6 +51,8 @@ KEY_RE = re.compile(r"^[A-Za-z0-9]{20,64}$")
 UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 FILE_KINDS = ("ready", "pending", "report")
 BAD_ZOMATO_URL_MESSAGE = "Open the link in your browser and paste the full zomato.com address"
+VC_RUNTIME_STATUS = "Visual check needs the Microsoft VC++ runtime"
+VC_RUNTIME_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 
 
 def _validate_zomato_url(raw: str) -> str:
@@ -112,6 +115,15 @@ class EventBus:
                 if remaining <= 0:
                     return False
                 self._cond.wait(remaining)
+
+
+def onnxruntime_error() -> str:
+    """Why onnxruntime cannot load, or "" when it can. Its DLLs need the Microsoft VC++ runtime."""
+    try:
+        importlib.import_module("onnxruntime")
+    except Exception as exc:
+        return str(exc) or type(exc).__name__
+    return ""
 
 
 class Worker:
@@ -186,7 +198,7 @@ class Worker:
     def _load_engine(self) -> None:
         try:
             self.engine = self.engine_factory()
-            self.status = "Ready"
+            self.status = VC_RUNTIME_STATUS if onnxruntime_error() else "Ready"
         except Exception as exc:
             log.exception("engine build failed")
             self.status = f"Engine failed: {exc}"

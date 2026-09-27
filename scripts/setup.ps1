@@ -67,7 +67,9 @@ try {
                 $toolsDir = Join-Path $HomeDir "tools"
                 New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
                 $uvZip = Join-Path $toolsDir "uv.zip"
-                $uvUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+                $uvPinnedUrl = "https://github.com/astral-sh/uv/releases/download/0.12.19/uv-x86_64-pc-windows-msvc.zip"
+                $uvLatestUrl = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
+                $uvUrl = $uvPinnedUrl
                 $downloaded = $false
                 for ($attempt = 1; $attempt -le 2; $attempt++) {
                     try {
@@ -76,6 +78,12 @@ try {
                         break
                     } catch {
                         $downloaded = $false
+                        # The pinned release is gone: fall back to the latest one, with fresh retries.
+                        $resp = $_.Exception.Response
+                        if ($uvUrl -eq $uvPinnedUrl -and $resp -and [int]$resp.StatusCode -eq 404) {
+                            $uvUrl = $uvLatestUrl
+                            $attempt = 0
+                        }
                     }
                 }
                 if (-not $downloaded) {
@@ -180,6 +188,31 @@ try {
             exit 1
         }
         Set-Content -Path $stampFile -Value $hash -NoNewline
+    }
+
+    # The visual and logo checks use onnxruntime, whose DLLs need the Microsoft VC++ 2015-2022 runtime.
+    $onnxOk = $false
+    try {
+        & $Py -c "import onnxruntime" 2>$null
+        $onnxOk = ($LASTEXITCODE -eq 0)
+    } catch {
+        $onnxOk = $false
+    }
+    if (-not $onnxOk) {
+        $vcUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+        Write-Host "Click Yes to install a Microsoft component" -ForegroundColor Yellow
+        try {
+            $vcRedist = Join-Path $HomeDir "vc_redist.x64.exe"
+            Invoke-WebRequest -Uri $vcUrl -OutFile $vcRedist -UseBasicParsing
+            Start-Process -FilePath $vcRedist -ArgumentList "/install", "/passive", "/norestart" -Wait
+            & $Py -c "import onnxruntime" 2>$null
+            $onnxOk = ($LASTEXITCODE -eq 0)
+        } catch {
+            $onnxOk = $false
+        }
+        if (-not $onnxOk) {
+            Write-Host "The visual and logo checks could not start because the Microsoft Visual C++ runtime is missing. Menu Studio still runs, matching dishes by name only. To fix it, install $vcUrl and run RUN_ME.bat again." -ForegroundColor Yellow
+        }
     }
 
     # [4/4] Start

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
 import time
 
@@ -9,6 +10,7 @@ import pytest
 
 from studio import imaging, pipeline
 from studio.pipeline import JobOptions, choose_alternate
+from studio.server import VC_RUNTIME_STATUS, Worker
 from studio.sheets import safe_vendor
 from tests.test_pipeline import Env, branded_jpeg, sheet
 from tests.test_sheets import make_template
@@ -174,3 +176,23 @@ def test_cli_bad_file(tmp_path, monkeypatch, capsys):
 
     assert rc == 1
     assert "Could not open the file" in capsys.readouterr().out
+
+
+# ---- FIX3 TC4: missing Microsoft VC++ runtime ----
+
+def test_fix3_tc4_self_test_fails_with_vc_runtime_link_when_onnxruntime_cannot_load(monkeypatch, capsys):
+    import app as app_module
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)
+
+    assert app_module.main(["--self-test"]) == 1
+    assert "https://aka.ms/vs/17/release/vc_redist.x64.exe" in capsys.readouterr().out
+
+
+def test_fix3_worker_status_names_vc_runtime_when_onnxruntime_cannot_load(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)
+    worker = Worker(tmp_path, tmp_path / "settings.json")
+    worker.engine_factory = object
+
+    worker._load_engine()
+
+    assert worker.status == VC_RUNTIME_STATUS

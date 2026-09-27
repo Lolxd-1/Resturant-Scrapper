@@ -15,7 +15,7 @@ import requests
 import uvicorn
 
 from studio.config import home_dir
-from studio.server import create_app
+from studio.server import VC_RUNTIME_URL, create_app, onnxruntime_error
 
 log = logging.getLogger("app")
 
@@ -42,6 +42,10 @@ def _health_ok(host: str, port: int, timeout: float = 2.0) -> bool:
 
 
 def _self_test() -> int:
+    if onnxruntime_error():
+        print("SELF-TEST FAILED: the visual and logo checks need the Microsoft Visual C++ runtime. "
+              f"Install it from {VC_RUNTIME_URL} and run Menu Studio again.")
+        return 1
     port = _free_port("127.0.0.1", 8765)
     config = uvicorn.Config(create_app(start_worker=False), host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
