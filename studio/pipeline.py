@@ -173,6 +173,29 @@ def _cand_dict(c: Candidate) -> dict:
     }
 
 
+def _pick_dict(r: DishResult) -> dict:
+    return {
+        "item_name": r.item_name, "restaurant": r.restaurant, "restaurant_url": r.restaurant_url,
+        "zomato_img": r.zomato_img, "tier": r.tier, "confidence": r.confidence, "source": r.source,
+    }
+
+
+def _summarize(results: list[DishResult], files: dict[str, Path], *,
+               vision: bool, duration_s: float, warnings: list[str]) -> dict:
+    total = len(results)
+    count = Counter(r.status for r in results)
+    photos = sum(1 for r in results if r.local_image)
+    return {
+        "total": total, "ready": count["ready"], "needs_photo": count["needs_photo"],
+        "needs_price": count["needs_price"], "errors": count["error"],
+        "coverage": round(photos / total, 3) if total else 0.0,
+        "vision": vision,
+        "duration_s": round(duration_s, 1),
+        "files": {k: p.name for k, p in files.items()},
+        "warnings": list(warnings),
+    }
+
+
 def _apply_pick(r: DishResult, d: dict) -> None:
     r.item_name, r.restaurant, r.restaurant_url = d["item_name"], d["restaurant"], d["restaurant_url"]
     r.zomato_img, r.tier, r.confidence, r.source = d["zomato_img"], d["tier"], d["confidence"], d["source"]
@@ -367,18 +390,8 @@ class _Run:
                                     vision_on=self.engine.vision.available)
 
     def summary(self, files: dict[str, Path]) -> dict:
-        total = len(self.results)
-        count = Counter(r.status for r in self.results)
-        photos = sum(1 for r in self.results if r.local_image)
-        return {
-            "total": total, "ready": count["ready"], "needs_photo": count["needs_photo"],
-            "needs_price": count["needs_price"], "errors": count["error"],
-            "coverage": round(photos / total, 3) if total else 0.0,
-            "vision": self.engine.vision.available,
-            "duration_s": round(time.monotonic() - self.started, 1),
-            "files": {k: p.name for k, p in files.items()},
-            "warnings": list(self.warnings),
-        }
+        return _summarize(self.results, files, vision=self.engine.vision.available,
+                           duration_s=time.monotonic() - self.started, warnings=self.warnings)
 
     # ---- stages ----
 
@@ -723,3 +736,85 @@ class _Run:
             self.write_results()
             self.emit_rows(rows)
             self.stage("upload", (i + 1) / len(todo))
+
+
+def rebuild_outputs(engine_or_none: Engine | None, job_dir: Path) -> dict:
+    """Rebuild the three output files from results.json and clear job.json's sheets_stale flag."""
+    job_dir = Path(job_dir)
+    job = load_job(job_dir)
+    data = json.loads((job_dir / "results.json").read_text(encoding="utf-8"))
+    results = [dish_result_from_dict(d) for d in data]
+    prev_summary = job.get("summary") or {}
+    vision_on = engine_or_none.vision.available if engine_or_none is not None \
+        else bool(prev_summary.get("vision", True))
+    files = sheets.build_outputs(results, TEMPLATE_PATH, job_dir, job["vendor"], vision_on=vision_on)
+    summary = _summarize(results, files, vision=vision_on,
+                         duration_s=prev_summary.get("duration_s", 0.0),
+                         warnings=prev_summary.get("warnings", []))
+    job["summary"] = summary
+    job["sheets_stale"] = False
+    job["updated"] = _now()
+    _write_json(job_dir / "job.json", job)
+    return summary
+
+
+def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | None,
+                     uploader: Uploader | None, *, rebuild: bool = True) -> DishResult:
+    """Swap sku's photo to one of its stored alternates, or mark it as needing an owner photo."""
+    job_dir = Path(job_dir)
+    results_file = job_dir / "results.json"
+    data = json.loads(results_file.read_text(encoding="utf-8"))
+    by_sku = {d["sku"]: i for i, d in enumerate(data)}
+    try:
+        idx = by_sku[sku]
+    except KeyError:
+        raise ValueError(f"Unknown SKU {sku}")
+    r = dish_result_from_dict(data[idx])
+    job = load_job(job_dir)
+    upload = bool(job.get("options", {}).get("upload", True))
+
+    if alt_index is None:
+        r.alternates = [_pick_dict(r), *r.alternates]
+        r.local_image, r.hosted_url, r.zomato_img = "", "", ""
+        r.status, r.reason = "needs_photo", "Marked by you: needs owner photo"
+    else:
+        try:
+            alt = r.alternates[alt_index]
+        except IndexError:
+            raise ValueError("No such alternate")
+        got = imaging.fetch_full(alt["zomato_img"], engine.http)
+        if got is None:
+            raise ValueError("That photo could not be downloaded")
+        jpeg, (w, h) = got
+        old_pick = _pick_dict(r) if r.zomato_img else None
+        alternates = list(r.alternates)
+        if old_pick is not None:
+            alternates[alt_index] = old_pick
+        else:
+            alternates.pop(alt_index)
+        r.alternates = alternates
+        r.item_name, r.restaurant, r.restaurant_url = alt["item_name"], alt["restaurant"], alt["restaurant_url"]
+        r.zomato_img, r.tier, r.confidence, r.source = alt["zomato_img"], alt["tier"], alt["confidence"], alt["source"]
+        r.local_image = f"images/{sku}.jpg"
+        r.image_size = f"{w}x{h}"
+        (job_dir / r.local_image).write_bytes(jpeg)
+        r.hosted_url = ""
+        if upload and uploader is not None:
+            try:
+                r.hosted_url = uploader.upload(jpeg, r.name)
+            except UploadError as exc:
+                raise ValueError(str(exc)) from exc
+        r.status, r.reason = "", ""
+        _settle(r, upload)
+
+    data[idx] = dish_result_to_dict(r)
+    _write_json(results_file, data)
+
+    if rebuild:
+        rebuild_outputs(engine, job_dir)
+    else:
+        job["sheets_stale"] = True
+        job["updated"] = _now()
+        _write_json(job_dir / "job.json", job)
+
+    return r
