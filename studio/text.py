@@ -170,7 +170,10 @@ def size_base_key(name: str) -> str:
 
 def _is_alias(toks: list[str]) -> bool:
     roles = [token_role(t) for t in toks]
-    return "head" in roles or "protein" in roles or sum(r in ("visual", "base") for r in roles) >= 2
+    if "head" in roles or "protein" in roles or sum(r in ("visual", "base") for r in roles) >= 2:
+        return True
+    # "(Drumstick Curry)" restates the dish; CURRY is soft, so the rules above miss it
+    return "CURRY" in toks and len(toks) >= 2
 
 
 def _has_hint(padded: str, hints: frozenset[str]) -> bool:

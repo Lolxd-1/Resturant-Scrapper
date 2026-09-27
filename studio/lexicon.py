@@ -27,7 +27,7 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "BHINDI": ("bhindi", "bhendi", "okra"),
     "BAINGAN": ("baingan", "brinjal", "eggplant", "vangi", "vange", "vangyache"),
     "METHI": ("methi", "fenugreek"),
-    "GARLIC": ("garlic", "lasun", "lasoon", "lehsun", "lahsun"),
+    "GARLIC": ("garlic", "lasun", "lasan", "lasoon", "lehsun", "lehsan", "lahsun"),
     "ONION": ("onion", "onions", "kanda", "pyaz", "pyaaz"),
     "TOMATO": ("tomato", "tomatoes", "tamatar"),
     "MUSHROOM": ("mushroom", "mushrooms", "alambi"),
@@ -67,6 +67,7 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "ROAST": ("roast", "roasted"),
     "CRISPY": ("crispy", "crunchy", "kurkure"),
     "PAV": ("pav", "pao", "paav"),
+    "plain": ("plain", "sadha", "saada", "sada"),
     # dish types (heads)
     "PIZZA": ("pizza", "pizzas"),
     "BURGER": ("burger", "burgers"),
@@ -124,7 +125,8 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "NACHOS": ("nachos", "nacho"),
     "TACO": ("taco", "tacos"),
     "HANDI": ("handi",),
-    "CURRY": ("curry", "curries"),
+    # a curry in a bowl: "X Curry", "X Rassa", "X Gravy", "X Kalwan" look the same (not a head)
+    "CURRY": ("curry", "curries", "rassa", "gravy", "kalwan"),
 }
 
 SYNONYMS: dict[str, str] = {w: canon for canon, words in _SYNONYM_GROUPS.items() for w in words}
@@ -192,6 +194,8 @@ PHRASES: dict[str, str] = {
     "mixed vegetable": "MIXVEG",
     "mix vegetables": "MIXVEG",
     "mixed vegetables": "MIXVEG",
+    "shevbhaji": "SEV BHAJI",
+    "sevbhaji": "SEV BHAJI",
 }
 
 # size / quantity / marketing / filler words: removed from tokens
@@ -210,13 +214,17 @@ NON_VISUAL: frozenset[str] = frozenset({
     "dum", "adrak", "ginger", "tulsi", "elaichi", "cardamom", "irani", "indori", "mumbai",
     "punjabi", "hyderabadi", "lucknowi", "spicy", "mild", "masaledar", "special",
     "amritsari", "desi", "homestyle", "dhaba", "authentic", "mast", "tasty",
+    "combo", "meal", "platter", "bucket",  # combo-ness is judged by is_combo_name, not by the word
 })
 
 # may be missing for a "close" match, never for exact/strong
 SOFT: frozenset[str] = frozenset({
-    "PERIPERI", "masala", "FRY", "CRISPY", "dry", "gravy", "sukha", "rassa", "kolhapuri",
+    "PERIPERI", "masala", "FRY", "CRISPY", "dry", "CURRY", "sukha", "kolhapuri", "kala",
     "hot", "jumbo", "mini", "double", "extra", "loaded",
 })
+
+# soft tokens that all name a dish served in gravy: "Kaju Curry" and "Kaju Masala" look alike
+CURRY_LIKE: frozenset[str] = frozenset({"CURRY", "masala"})
 
 # canonical token -> head (dish type)
 HEADS: dict[str, str] = {
@@ -229,7 +237,7 @@ HEADS: dict[str, str] = {
         "KULCHA", "NAAN", "DAL", "CURD", "SHEERA", "SHRIKHAND", "AAMRAS", "GULABJAMUN",
         "SPRINGROLL", "ROLL", "SALAD", "SOUP", "OMELETTE", "BHURJI", "KHICHDI",
         "SABUDANAKHICHDI", "DALKHICHDI", "WAFFLE", "PANCAKE", "JUICE", "SODA", "LEMONADE",
-        "KEBAB", "TIKKA", "CHAAP", "BUNMASKA", "SIZZLER", "NACHOS", "TACO", "HANDI", "CURRY",
+        "KEBAB", "TIKKA", "CHAAP", "BUNMASKA", "SIZZLER", "NACHOS", "TACO", "HANDI",
     )},
     "MASALAPAPAD": "PAPAD",
     "MASALADOSA": "DOSA",
@@ -245,7 +253,7 @@ HEAD_GROUP: dict[str, str] = {
     **dict.fromkeys(("CHAPATI", "ROTI", "BHAKRI", "PARATHA", "KULCHA", "NAAN"), "flatbread"),
     **dict.fromkeys(("BIRYANI", "PULAO", "RICE", "FRIEDRICE", "KHICHDI", "DALKHICHDI",
                      "SABUDANAKHICHDI"), "rice"),
-    **dict.fromkeys(("CURRY", "DAL", "HANDI", "MISAL", "PAVBHAJI"), "curry"),
+    **dict.fromkeys(("DAL", "HANDI", "MISAL", "PAVBHAJI"), "curry"),
     **dict.fromkeys(("SANDWICH", "GARLICBREAD", "BUNMASKA", "VADAPAV", "BURGER"), "bread_snack"),
     "PIZZA": "pizza",
     **dict.fromkeys(("PASTA", "MAGGI", "NOODLES"), "noodle_pasta"),
@@ -332,7 +340,6 @@ HEAD_PROMPT: dict[str, str] = {
     "NACHOS": "a plate of nachos",
     "TACO": "tacos",
     "HANDI": "an Indian curry served in a handi pot",
-    "CURRY": "an Indian curry in a bowl",
 }
 
 # head -> Zomato cuisine slugs to crawl for candidate photos
@@ -407,7 +414,6 @@ HEAD_CUISINES: dict[str, tuple[str, ...]] = {
     "NACHOS": ("mexican", "fast-food"),
     "TACO": ("mexican", "fast-food"),
     "HANDI": ("north-indian", "mughlai"),
-    "CURRY": ("north-indian", "maharashtrian"),
 }
 
 # token -> protein. Fish species stay distinct tokens (a pomfret does not look like surmai)

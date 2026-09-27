@@ -13,7 +13,7 @@ from typing import Callable, Iterable
 
 from rapidfuzz import fuzz
 
-from studio.lexicon import HEADS
+from studio.lexicon import CURRY_LIKE, HEADS
 from studio.models import Candidate, DishQuery, MatchScore, PoolItem
 from studio.text import is_combo_name, item_head, item_proteins, normalize, token_role, tokens
 
@@ -127,7 +127,7 @@ class PoolIndex:
 
 
 def _score_variant(q: DishQuery, v: frozenset[str], facts, ratio: float, idf, median) -> MatchScore:
-    item_toks, i_head, _, i_combo = facts
+    item_toks, i_head, _, _ = facts
     if not v:
         return _reject("empty")
     v_heads = {HEADS[t] for t in v if t in HEADS}
@@ -164,9 +164,15 @@ def _score_variant(q: DishQuery, v: frozenset[str], facts, ratio: float, idf, me
         if tier == "exact":
             tier = "strong"
         reasons += [f"extra {t}" for t in extra_soft]
-    if q.is_combo and not i_combo:
+    if q.is_combo:
+        # two combos never show exactly the same set of items
         tier = "close"
-        reasons.append("item is not a combo")
+        reasons.append("combo")
+    if tier == "close":
+        evidence = sum(1 for t in q_vis & i_vis if token_role(t) != "soft")
+        evidence += bool(v & CURRY_LIKE and item_toks & CURRY_LIKE)
+        if evidence < 2:
+            return _reject("too little evidence")
 
     lo, hi = _TIER_RANGE[tier]
     penalty = 0.01 * sum(1 for t in item_toks - v if token_role(t) in ("nonvisual", "soft"))
@@ -179,6 +185,13 @@ def _order(s: MatchScore) -> tuple[int, float]:
 
 
 def score(q: DishQuery, item: PoolItem, idf: Callable[[str], float]) -> MatchScore:
+    """Tier and 0..1 text score for "item's photo shows dish q".
+
+    One extra visual token whose idf is below the pool median lowers the tier to close
+    instead of rejecting. The median is only known when `idf` is a bound PoolIndex.idf
+    (read through `idf.__self__`); for any other callable there is no median, so every
+    extra visual token rejects.
+    """
     facts = _item_facts(item.name, item.category, item.menu_name)
     item_toks, _, i_proteins, i_combo = facts
     if not item_toks or not any(q.variants):

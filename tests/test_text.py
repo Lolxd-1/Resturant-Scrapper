@@ -124,7 +124,7 @@ def test_parenthetical_options_and_modifiers():
     assert bhaji.variants[0] == frozenset({"BAINGAN", "BHAJI", "kala", "masala"})
     shevga = parse_dish("Shevga Masala Lal (Drumstick Curry)")
     assert frozenset({"SHEVGA", "CURRY"}) in shevga.variants
-    assert shevga.head == "CURRY"
+    assert shevga.head is None  # CURRY is a soft token, not a head
 
 
 def test_noise_only_name_keeps_tokens():
@@ -147,6 +147,16 @@ def test_diet_name_decides_before_category():
     assert parse_dish("Egg Biryani", "Non Veg Biryani").diet == "egg"
     assert parse_dish("Dal Fry", "Non Veg").diet == "unknown"
     assert parse_dish("Dal Fry", "Veg Main Course").diet == "veg"
+
+
+def test_curry_family_and_spellings():
+    assert tokens("Shevga Rassa") == tokens("Shevga Curry") == tokens("Shevga Gravy")
+    assert token_role("CURRY") == "soft"
+    assert token_role("kala") == "soft"
+    assert tokens("Lasan Methi") == tokens("Lasun Methi")
+    assert tokens("Sadha Rice (Full)") == tokens("Plain Rice") == tokens("Sada Rice")
+    assert tokens("Shevbhaji") == tokens("Shev Bhaji")
+    assert tokens("Combo Meal") == ["combo", "meal"] and token_role("combo") == "nonvisual"
 
 
 def test_category_hints_are_unambiguous():

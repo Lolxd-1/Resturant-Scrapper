@@ -8,7 +8,7 @@ import time
 import pytest
 
 from studio.matcher import PoolIndex, rank, same_dish_menu_match, score
-from studio.models import PoolItem
+from studio.models import MatchScore, PoolItem
 from studio.text import parse_dish
 
 # (dish_name, dish_category, item_name, item_category, item_diet, expected)
@@ -46,6 +46,8 @@ GOLDEN = [
     ("Peri Peri Chicken Burger", "Burgers", "Veg Burger", "Burgers", "veg", "reject"),
     ("Paneer Butter Masala", "Main Course", "Butter Chicken", "Main Course", "nonveg", "reject"),
     ("Veg Cheese Sandwich", "Sandwiches", "Veg Cheese Pizza", "Pizza", "veg", "reject"),
+    ("Shevga Dry (Drumstick Dry)", "Main Course", "Veg Drumsticks", "Starters", "veg", "reject"),
+    ("Soyabean Dry", "Main Course", "Soyabean Chilli", "Chinese", "veg", "reject"),
     ("Taak", "Cold Drinks", "Buttermilk", "Beverages", "veg", "exact"),
     ("Mattha", "Cold Drinks", "Chaas", "Beverages", "veg", "exact"),
     ("Flower Masala (Cauliflower Curry)", "Main Course", "Gobi Masala", "Main Course", "veg", "strong+"),
@@ -81,6 +83,12 @@ GOLDEN = [
     ("Jain Dal Fry", "Main Course", "Dal Fry (Jain)", "Main Course", "veg", "exact"),
     ("Soyabean Masala", "Main Course", "Soya Chunks Masala", "Main Course", "veg", "strong+"),
     ("Dal Fry", "Main Course", "Dal Fry", "Main Course", "veg", "exact"),
+    ("Shevga Curry", "Main Course", "Shevga Rassa", "Main Course", "veg", "strong+"),
+    ("Shevga Masala Lal (Drumstick Curry)", "Main Course", "Shevga Rassa", "Main Course", "veg", "strong+"),
+    ("Kaju Curry", "Main Course", "Kaju Masala", "Main Course", "veg", "close+"),
+    ("Shev Bhaji (Kala Masala Special)", "Main Course", "Shev Bhaji", "Maharashtrian", "veg", "close+"),
+    ("Cheese Pizza (Half) & Veg Cheese Corn Pizza (Half)", "Combos", "Cheese Corn Pizza Combo", "Combos",
+     "veg", "close"),  # combos: close+ and NOT exact/strong
 ]
 
 ALLOWED = {
@@ -172,8 +180,26 @@ def test_one_common_extra_visual_token_is_close():
 def test_soft_extra_is_strong_and_combo_query_is_close():
     s = score(parse_dish("Paneer Pizza"), make_item("Paneer Pizza Masala", "Pizza", "veg"), INDEX.idf)
     assert s.tier == "strong" and 0.75 <= s.text < 0.90
-    combo = score(parse_dish("Veg Burger Plus"), make_item("Veg Burger", "Burgers", "veg"), INDEX.idf)
-    assert combo.tier == "close"
+
+
+def test_combo_query_is_never_exact_or_strong():
+    q = parse_dish("Cheese Pizza (Half) & Veg Cheese Corn Pizza (Half)", "Combos")
+    for item in ("Cheese Corn Pizza Combo", "Cheese Pizza & Corn Cheese Pizza"):
+        s = score(q, make_item(item, "Combos", "veg"), constant_idf)
+        assert s.tier == "close" and 0.55 <= s.text < 0.75, (item, s)
+
+
+def test_close_needs_two_matched_tokens():
+    s = score(parse_dish("Shevga Dry (Drumstick Dry)"), make_item("Veg Drumsticks", "Starters", "veg"),
+              constant_idf)
+    assert s == MatchScore("reject", 0.0, ("too little evidence",))
+    chilli_pool = PoolIndex(make_item(n, "Chinese", "veg") for n in (
+        "Chilli Paneer", "Chilli Potato", "Chilli Mushroom", "Chilli Gobi", "Soyabean Chilli", "Dal Fry"))
+    assert chilli_pool.idf("CHILLI") < chilli_pool.median_idf()
+    soya = score(parse_dish("Soyabean Dry"), make_item("Soyabean Chilli", "Chinese", "veg"), chilli_pool.idf)
+    assert soya.reasons == ("too little evidence",)
+    kaju = score(parse_dish("Kaju Curry"), make_item("Kaju Masala", "Main Course", "veg"), constant_idf)
+    assert kaju.tier == "close"
 
 
 def test_rank_prefers_plain_name():
