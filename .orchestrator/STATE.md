@@ -8,7 +8,7 @@ updated: 2026-09-27T08:10:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-Gate T04 after its executor returns; then T05, T14, DATA1 crawl.
+T02 in flight; DATA1 crawl running in background (commit data/seed_pool.jsonl.gz when it finishes). Then T03, T06...
 
 ## Baseline
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
@@ -17,9 +17,9 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T01 Scaffold, contracts, config, deps, dev venv — o1 — done 5a87e7e..5f6ff1e (gate PASS)
 - [x] T04 Zomato client + parsers — o2 — done f3e3014..4c3ac28 (gate PASS; scope hit = orchestrator .gitignore fix)
 - [x] T05 Pool store — o3 — done fc7b91f..29a74af (gate PASS)
-- [~] T14 Seed pool builder tool — o4 — attempt=1
-- [ ] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — deps T14
-- [ ] T02 Menu reader — o5 — deps T01
+- [x] T14 Seed pool builder tool — o4 — done b70c54a..7aadf3b (gate PASS)
+- [~] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — running, log %LOCALAPPDATA%MenuStudioseed_crawl.log
+- [~] T02 Menu reader — o5 — attempt=1
 - [ ] T03 Lexicon + text — o6 — deps T01
 - [ ] T06 Matcher + golden set — o7 — deps T03 T05
 - [ ] T07 Imaging + vision — o8 — deps T03 T04 T05
