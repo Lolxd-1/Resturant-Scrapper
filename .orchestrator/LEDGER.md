@@ -13,3 +13,4 @@
 - 2026-09-27T07:44:44Z dispatch T04 (sonnet)
 - 2026-09-27T07:59:32Z Ruling: removed '!tests/fixtures/**' from .gitignore (my T01 brief defect: un-ignored __pycache__) — fixtures are generated in code — cost if wrong: none. T04 TC12 threshold 180->140 accepted (144 real restaurants with photos; 20,459 items matches recon).
 - 2026-09-27T07:59:56Z T04 PASS (ruled). dispatch T05 (sonnet)
+- 2026-09-27T08:03:39Z T05 PASS. dispatch T14 (sonnet)
