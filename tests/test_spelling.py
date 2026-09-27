@@ -129,3 +129,32 @@ def test_tc4_transliterate():
 def test_tc5_homoglyphs():
     assert fold_homoglyphs("PANEER CHАТРАТА") == "PANEER CHATPATA"
     assert Speller(VOCAB).fix_text("PANEER CHАТРАТА") == "paneer chatpata"
+
+
+def test_protected_kanduri_not_phonetically_rewritten():
+    # kanduri (mutton feast) must not be phonetically corrected to kandhari (a different dish)
+    speller = Speller({"kandhari": 50})
+    result = speller.fix_text("कंदुरी मटन हांडी (हाफ)")
+    assert "kanduri" in result
+    assert "kandhari" not in result
+
+
+def test_protected_mith_not_phonetically_rewritten():
+    # mith (salt) must not be phonetically corrected to meetha (sweet)
+    speller = Speller({"meetha": 80})
+    assert speller.fix_text("CHICKEN MITH MIRCHI") == "chicken mith mirchi"
+
+
+def test_devanagari_nag_becomes_pcs_not_naga():
+    speller = Speller({"naga": 50, "anda": 20, "boiled": 20})
+    result = speller.fix_text("ANDA BOIL (2 नग)")
+    tokens = result.split()
+    assert "anda" in tokens
+    assert any(t.startswith("boiled") for t in tokens)
+    assert "naga" not in tokens
+    assert "nag" not in result
+
+
+def test_protected_hangama_not_phonetically_rewritten():
+    speller = Speller({"hungama": 50})
+    assert speller.fix_text("VEG HANGAMA") == "veg hangama"

@@ -37,6 +37,7 @@ DEVANAGARI_WORDS: dict[str, str] = {
     "पिठले": "pithla", "शेव": "shev", "लस्सी": "lassi", "ताक": "taak", "दही": "dahi",
     "वरण": "varan", "आमटी": "amti", "कोंबडी": "kombdi", "मच्छी": "machhi", "सोलकढी": "solkadhi",
     "भरीत": "bharit", "झुणका": "zunka", "उसळ": "usal", "राडा": "rada",
+    "नग": "pcs", "नग.": "pcs", "पीस": "pcs", "मीठ": "mith", "मिठ": "mith",
 }
 
 _DEV_VOWELS = {
@@ -121,6 +122,17 @@ MISSPELLINGS: dict[str, str] = {
     "harabhara": "hara bhara",
 }
 
+# genuine local food words that must never be phonetically corrected into a different dish
+PROTECTED: frozenset[str] = frozenset({
+    "kanduri", "mith", "vajadi", "sukka", "tambda", "pandhra", "rassa", "kala", "kolhapuri",
+    "malvani", "gavran", "gavkari", "danka", "rada", "timepas", "akkha", "zunka", "pithla",
+    "pitla", "bharit", "usal", "misal", "amti", "varan", "solkadhi", "kombdi", "machhi",
+    "bhakri", "bhakar", "thecha", "khichadi", "sabudana", "shengdana", "kakdi", "harbhara",
+    "rajarani", "chatpata", "lajij", "chilimili", "hangama",
+} | frozenset(DEVANAGARI_WORDS.values()) | frozenset(
+    part for value in MISSPELLINGS.values() for part in value.split()
+))
+
 _PHONETIC_STEPS = (
     ("chh", "c"), ("ch", "c"), ("ph", "f"), ("sh", "s"), ("kh", "k"), ("gh", "g"), ("th", "t"),
     ("dh", "d"), ("bh", "b"), ("jh", "j"), ("ck", "k"), ("q", "k"), ("x", "ks"), ("w", "v"),
@@ -203,11 +215,21 @@ class Speller:
             return None
         if word in MISSPELLINGS:
             return MISSPELLINGS[word]
+        if word in PROTECTED:
+            return None
         if self.vocab.get(word, 0) >= _KNOWN_DF or word in self._lexicon:
             return None
         return self._split(word) or self._phonetic(word)
 
     def fix_text(self, text: str) -> str:
-        """Lowercased text with every misspelled word replaced; brackets and punctuation kept."""
-        s = " ".join(transliterate(fold_homoglyphs(text or "")).lower().split())
-        return _WORD_RE.sub(lambda m: self.correct(m.group(0)) or m.group(0), s)
+        """Lowercased text with every misspelled word replaced; brackets and punctuation kept.
+        Words that came from a Devanagari segment only ever get the curated MISSPELLINGS lookup."""
+        out: list[str] = []
+        for segment in fold_homoglyphs(text or "").split():
+            from_devanagari = bool(_DEVANAGARI_RE.search(segment))
+            segment = transliterate(segment).lower()
+            if from_devanagari:
+                out.append(_WORD_RE.sub(lambda m: MISSPELLINGS.get(m.group(0)) or m.group(0), segment))
+            else:
+                out.append(_WORD_RE.sub(lambda m: self.correct(m.group(0)) or m.group(0), segment))
+        return " ".join(out)
