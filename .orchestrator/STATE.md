@@ -3,12 +3,12 @@
 run: menu-photo-v2
 branch: prodv2.0
 run-base: 040e68b3b25564e4dd754713de6810fe6b770bed
-status: executing
+status: done
 updated: 2026-09-27T08:10:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-TUNE1 in flight, then TUNE2, TUNE3, UIFIX, T13, T15, re-EVAL (6 menus in scratchpad/eval_menus), FINAL review, push prodv2.0. Live eval so far: SBH 16/16 then 18/18 real job; HFC 85/101 all correct; GEV 70/81; GB 92%; LPP 26/35 (chain gaps -> TUNE2); DP crashed (disk full). User TODO(human) open in pipeline._combine_scores.
+Done. Branch prodv2.0 pushed. Open follow-ups: user TODO(human) in studio/pipeline.py _combine_scores (baseline works); PR/merge to main is the user's call.
 
 ## Baseline
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
@@ -40,7 +40,7 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] FIX1 Swap/rebuild concurrency, honest downloads — done 002d647..d8cd1fc (gate PASS)
 - [x] FIX2 Robustness — done 11bdfc0..b45cc29 (gate PASS; resumed twice after maxTurns)
 - [x] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — done bf47bec..9708583 (gate PASS; CLOSE_AGREE_MIN 0.82 calibrated)
-- [ ] FINAL verify-all, final review, FIX1, push prodv2.0
+- [x] FINAL verify-all 286 passed, final review (opus) -> FIX1-3 -> rereview APPROVE, key-leak check clean, pushed prodv2.0
 
 ## Open questions
 - none (rulings logged in LEDGER.md)
