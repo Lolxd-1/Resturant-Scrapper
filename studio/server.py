@@ -8,6 +8,7 @@ import logging
 import os
 import queue
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -300,6 +301,7 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
             "keys": sum(1 for k in settings.imgbb_keys if k.key),
             "version": studio.__version__,
             "active_job": worker.current,
+            "free_gb": round(shutil.disk_usage(output_dir).free / 1_000_000_000, 1),
         }
 
     @app.get("/api/settings")

@@ -6,8 +6,10 @@ import json
 import time
 import zipfile
 
+import pytest
 from fastapi.testclient import TestClient
 
+from studio import pipeline
 from studio import server as server_mod
 from studio.models import PoolItem, RestaurantMenu
 from studio.pipeline import Engine
@@ -15,9 +17,15 @@ from studio.store import PoolStore
 from studio.zomato import Http
 from tests.conftest import FakeResponse, FakeSession, make_xlsx
 from tests.test_pipeline import FoodVision, noise_jpeg
+from tests.test_sheets import make_template
 
 IMG = "https://b.zmtcdn.com/data/dish/"
 RES_URL = "https://www.zomato.com/pune/pizza-place"
+
+
+@pytest.fixture(autouse=True)
+def small_template(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "TEMPLATE_PATH", make_template(tmp_path / "template.xlsx"))
 
 
 def _build_engine(tmp_path) -> Engine:
@@ -79,14 +87,14 @@ def _run_simple_job(client, tmp_path, vendor="Test Cafe"):
     assert r2.status_code == 200
     job_id = r2.json()["id"]
 
-    deadline = time.time() + 30
+    deadline = time.time() + 10
     job = None
     while time.time() < deadline:
         jr = client.get(f"/api/jobs/{job_id}")
         job = jr.json()
         if job["job"]["status"] in ("done", "failed", "cancelled"):
             break
-        time.sleep(0.1)
+        time.sleep(0.05)
     assert job is not None and job["job"]["status"] == "done", job
     return job_id, job
 
@@ -104,6 +112,10 @@ def test_health_and_index(tmp_path):
     r2 = client.get("/")
     assert r2.status_code == 200
     assert "Menu Studio" in r2.text
+
+    r3 = client.get("/api/system")
+    assert r3.status_code == 200
+    assert isinstance(r3.json()["free_gb"], float)
 
 
 # ---- TC2 ----

@@ -168,6 +168,9 @@ class _Group:
         self.resumed = False
 
 
+_DISK_FULL_MESSAGE = "Your computer's disk is almost full (%.1f GB free). Free up at least 1 GB and press Resume."
+
+
 def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -175,7 +178,14 @@ def _now() -> str:
 def _write_json(path: Path, data) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.02)
 
 
 def _head_keep(margins: np.ndarray, tiers: list[str]) -> list[bool]:
@@ -277,6 +287,21 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
             cancel: threading.Event | None = None) -> dict:
     menu_path, job_dir = Path(menu_path), Path(job_dir)
     job_dir.mkdir(parents=True, exist_ok=True)
+
+    free_gb = shutil.disk_usage(job_dir).free / 1_000_000_000
+    if free_gb < 0.5:
+        message = _DISK_FULL_MESSAGE % free_gb
+        job = {
+            "id": job_dir.name, "vendor": opts.vendor, "options": asdict(opts), "status": "failed",
+            "stage": "read", "created": _now(), "updated": _now(), "summary": None,
+            "error": message, "menu_file": None,
+        }
+        try:
+            _write_json(job_dir / "job.json", job)
+        except OSError:
+            pass
+        return _summarize([], {}, vision=engine.vision.available, duration_s=0.0, warnings=[])
+
     menu_copy = job_dir / f"menu{menu_path.suffix.lower()}"
     if menu_path.resolve() != menu_copy.resolve():
         shutil.copyfile(menu_path, menu_copy)
@@ -359,9 +384,15 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
             return summary
         except Exception as exc:
             log.exception("job %s failed", job_dir.name)
-            message = f"{type(exc).__name__}: {exc}"[:300]
+            if isinstance(exc, OSError) and exc.errno == 28:
+                message = _DISK_FULL_MESSAGE % (shutil.disk_usage(job_dir).free / 1_000_000_000)
+            else:
+                message = f"{type(exc).__name__}: {exc}"[:300]
             run.settle_all()
-            run.write_results()
+            try:
+                run.write_results()
+            except OSError:
+                pass
             summary = run.summary({})
             emit({"type": "error", "message": message})
             save_job(status="failed", error=message, summary=summary)

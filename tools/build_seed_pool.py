@@ -5,9 +5,13 @@ import argparse
 import gzip
 import json
 import logging
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from studio import config
 from studio.models import PoolItem, RestaurantMenu

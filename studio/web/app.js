@@ -222,6 +222,8 @@ function renderSystem() {
   const box = clear(document.getElementById("sys"));
   if (!system) {
     box.append(pill("Not connected", "red", "alert"));
+  } else if (typeof system.free_gb === "number" && system.free_gb < 1.5) {
+    box.append(pill(`Low disk space · ${system.free_gb} GB free`, "orange", "alert"));
   } else if (!system.ready) {
     const failed = system.status.startsWith("Engine failed");
     box.append(failed ? pill(system.status, "red", "alert") : pill(system.status, "blue", "spin"));

@@ -629,3 +629,21 @@ def test_tune3_tc6_ocr_import_failure_disables_guard(tmp_path, monkeypatch):
     assert summary["ready"] == 1
     res = env.results()["Cheese Pizza"]
     assert res["status"] == "ready" and res["zomato_img"]
+
+
+def test_uifix_tc2_low_disk_fails_before_any_work(tmp_path, monkeypatch):
+    class FakeUsage:
+        free = 0.2 * 1_000_000_000
+
+    monkeypatch.setattr(pipeline.shutil, "disk_usage", lambda path: FakeUsage())
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    job = load_job(tmp_path / "job1")
+    assert job["status"] == "failed"
+    assert "disk is almost full" in job["error"]
+    assert not (tmp_path / "job1" / "results.json").exists()
+    assert not list((tmp_path / "job1").glob("*_SmartBiz_*.xlsx"))
