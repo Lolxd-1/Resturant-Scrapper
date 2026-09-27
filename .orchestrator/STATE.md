@@ -24,8 +24,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T06 Matcher + golden set — o7 — done 4f1bb4f..3b6d625 (gate PASS after round 1; scope hit = DATA1 commit)
 - [x] T07 Imaging + vision — o8 — done 69d04b5..9e9ffb7 (gate PASS)
 - [x] T08 ImgBB uploader — o9 — done 80915bd..d55a628 (gate PASS + live rotation test)
-- [~] T09 Sheets builder — o10 — attempt=1
-- [ ] T10 Pipeline engine — o11 — deps T02-T09
+- [x] T09 Sheets builder — o10 — done a7011b3..ce67e5c (gate PASS, round 1 ruling)
+- [~] T10 Pipeline engine — o11 — attempt=1
 - [ ] T10B Photo swap + CLI — o12 — deps T10
 - [ ] T11 Server + app.py — o13 — deps T10B
 - [ ] T12 Web UI — o14 — deps T11

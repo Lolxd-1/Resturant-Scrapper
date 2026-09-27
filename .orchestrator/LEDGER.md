@@ -24,3 +24,4 @@
 - 2026-09-27T09:04:59Z T06 rereview APPROVE. T07 PASS (CURRY->DAL in TC5). dispatch T08 (sonnet)
 - 2026-09-27T09:12:21Z T08 PASS. Ruling: live test (bad key disabled -> rotated to real key, upload OK, no key in states) replaces the sonnet task review — cost if wrong: a subtle rotation bug caught later in EVAL. dispatch T09 (sonnet)
 - 2026-09-27T09:24:39Z T09 NEEDS_CONTEXT (template load+save floor ~25-35 s). Ruling: TC8 <= 60 s, single template load reused; swaps rebuild sheets asynchronously (notes added to T10B, T11) — cost if wrong: slower job end by ~15 s.
+- 2026-09-27T09:27:44Z T09 PASS. dispatch T10 (opus)
