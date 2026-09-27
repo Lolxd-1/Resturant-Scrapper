@@ -292,8 +292,10 @@ def test_index_basics():
 
 
 def test_unicode_dish_is_empty_reject():
-    s = score(parse_dish("पनीर टिक्का"), make_item("Paneer Tikka", "Starters", "veg"), INDEX.idf)
+    s = score(parse_dish("பனீர் டிக்கா"), make_item("Paneer Tikka", "Starters", "veg"), INDEX.idf)
     assert s.tier == "reject" and s.reasons == ("empty",)
+    s = score(parse_dish("पनीर टिक्का"), make_item("Paneer Tikka", "Starters", "veg"), INDEX.idf)
+    assert s.tier == "exact"
 
 
 _HEAD_WORDS = ["pizza", "burger", "sandwich", "pasta", "noodles", "momos", "fries", "shake",
