@@ -89,6 +89,13 @@ GOLDEN = [
     ("Shev Bhaji (Kala Masala Special)", "Main Course", "Shev Bhaji", "Maharashtrian", "veg", "close+"),
     ("Cheese Pizza (Half) & Veg Cheese Corn Pizza (Half)", "Combos", "Cheese Corn Pizza Combo", "Combos",
      "veg", "close"),  # combos: close+ and NOT exact/strong
+    # S3: veg imitation dishes, dish numbers, standalone bread words
+    ("Veg Anda Kari", "Shakahari Danka", "Anda Curry", "Egg Dishes", "egg", "reject"),
+    ("Veg Keema", "Gavkari Special Shakahari Danka", "Keema", "Main Course", "nonveg", "reject"),
+    ("Chicken 65", "Nonveg Chinese", "Ginger Chicken", "Chinese Starters", "nonveg", "reject"),
+    ("Veg Anda Kari", "Shakahari Danka", "Veg Anda Curry", "Veg Main Course", "veg", "strong+"),
+    ("Chicken 65", "Nonveg Chinese", "Chicken 65", "Starters", "nonveg", "exact"),
+    ("Paneer Kheema", "Main Course", "Paneer Keema", "Main Course", "veg", "exact"),
 ]
 
 ALLOWED = {

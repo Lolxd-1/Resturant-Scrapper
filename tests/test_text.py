@@ -173,6 +173,25 @@ def test_tune2_tc4_dish_head_from_own_category():
     assert parse_dish("Farmhouse", "Beverages").head is None
 
 
+def test_tc15_dish_numbers_kept_outside_parens():
+    assert "65" in tokens("Chicken 65")
+    assert not any(t.isdigit() for t in tokens("Lassi (250 ml)"))
+    assert "2" not in tokens("Anda Boil (2 pcs)")
+    kept = tokens("Chicken 65 (8 pcs)")
+    assert "65" in kept and "8" not in kept
+
+
+def test_tc16_veg_imitation_dish():
+    q = parse_dish("Veg Anda Kari", "Shakahari Danka")
+    assert q.diet == "veg"
+    assert q.proteins == frozenset()
+    assert "EGG" in q.variants[0]
+    q2 = parse_dish("Veg Keema", "Gavkari Special Shakahari Danka")
+    assert q2.diet == "veg"
+    assert q2.proteins == frozenset()
+    assert "KEEMA" in q2.variants[0]
+
+
 def test_s1_tc6_devanagari_dish_is_read():
     q = parse_dish("चिकन हंडी (हाफ)", "Nonveg Danka")
     assert q.proteins == frozenset({"CHICKEN"})

@@ -13,7 +13,7 @@ from typing import Callable, Iterable
 
 from rapidfuzz import fuzz
 
-from studio.lexicon import CURRY_LIKE, HEADS
+from studio.lexicon import CURRY_LIKE, HEADS, NONVEG_PROTEINS
 from studio.models import Candidate, DishQuery, MatchScore, PoolItem
 from studio.text import is_combo_name, item_head, item_proteins, normalize, size_base_key, token_role, tokens
 
@@ -211,7 +211,11 @@ def score(q: DishQuery, item: PoolItem, idf: Callable[[str], float]) -> MatchSco
     if not _diet_ok(q.diet, item.diet):
         return _reject("diet")
     if q.proteins != i_proteins:
-        return _reject("protein")
+        # a veg-style imitation ("Veg Anda Curry") keeps the meat/egg word as a token, not a
+        # protein; such a query only matches a veg item that carries the same word.
+        veg_imitation = q.diet == "veg" and any(t in NONVEG_PROTEINS for v in q.variants for t in v)
+        if not veg_imitation:
+            return _reject("protein")
     if i_combo and not q.is_combo:
         return _reject("combo")
     owner = getattr(idf, "__self__", None)

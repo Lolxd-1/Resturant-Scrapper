@@ -158,3 +158,8 @@ def test_devanagari_nag_becomes_pcs_not_naga():
 def test_protected_hangama_not_phonetically_rewritten():
     speller = Speller({"hungama": 50})
     assert speller.fix_text("VEG HANGAMA") == "veg hangama"
+
+
+def test_tc4_standalone_lachchha_is_read_as_lachha_paratha():
+    assert Speller(VOCAB).fix_text("LACHCHHA") == "lachha paratha"
+    assert Speller(VOCAB).fix_text("BATER LACHCHHA PARATHA") == "butter lachha paratha"

@@ -112,7 +112,7 @@ MISSPELLINGS: dict[str, str] = {
     "chatani": "chutney", "chatni": "chutney", "pital": "pitla", "pithal": "pitla",
     "crispi": "crispy", "crespi": "crispy", "cranchi": "crunchy", "cranchy": "crunchy",
     "pis": "peas", "garlik": "garlic", "kulchchha": "kulcha", "kulchha": "kulcha",
-    "lachchha": "lachha", "lacha": "lachha", "ghi": "ghee", "plet": "plate", "haf": "half",
+    "lachchha": "lachha", "lacha": "lachha", "laccha": "lachha", "ghi": "ghee", "plet": "plate", "haf": "half",
     "ful": "full", "leman": "lemon", "coriunder": "coriander", "coriandar": "coriander",
     "khima": "keema", "kophta": "kofta", "jayka": "zaika", "jaika": "zaika", "lajvab": "lajawab",
     "lajawaab": "lajawab", "mataki": "matki", "masur": "masoor", "rost": "roast",
@@ -132,6 +132,11 @@ PROTECTED: frozenset[str] = frozenset({
 } | frozenset(DEVANAGARI_WORDS.values()) | frozenset(
     part for value in MISSPELLINGS.values() for part in value.split()
 ))
+
+# a bare bread-section name that is really shorthand for the flatbread ("Lachchha" on a bread menu)
+WHOLE_NAME_EXPANSIONS: dict[str, str] = {
+    "lachha": "lachha paratha", "laccha": "lachha paratha", "lachcha": "lachha paratha",
+}
 
 _PHONETIC_STEPS = (
     ("chh", "c"), ("ch", "c"), ("ph", "f"), ("sh", "s"), ("kh", "k"), ("gh", "g"), ("th", "t"),
@@ -232,4 +237,5 @@ class Speller:
                 out.append(_WORD_RE.sub(lambda m: MISSPELLINGS.get(m.group(0)) or m.group(0), segment))
             else:
                 out.append(_WORD_RE.sub(lambda m: self.correct(m.group(0)) or m.group(0), segment))
-        return " ".join(out)
+        result = " ".join(out)
+        return WHOLE_NAME_EXPANSIONS.get(result, result)

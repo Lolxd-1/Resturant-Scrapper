@@ -41,6 +41,18 @@ _SIZE_TAIL_RE = re.compile(
     r"\s*\b(?:small|medium|large|regular|half|full|quarter|mini|jumbo|single|double)$"
     r"|\s*\b\d+\s*(?:ml|l|ltr|litre|liter|gm|gms|g|gram|grams|kg|pcs|pc|piece|pieces|nos|no|inch|inches)$"
 )
+_UNIT_WORDS_RE_PART = r"ml|l|ltr|litre|liter|gm|gms|g|gram|grams|kg|pcs|pc|piece|pieces|nos|no|inch|inches"
+# a 2- or 3-digit number outside parentheses and not followed by a unit word is part of the dish
+# name ("Chicken 65"); inside parentheses or before a unit it is a quantity, so stays noise.
+_KEEP_NUM_RE = re.compile(rf"\b(\d{{2,3}})\b(?!\s*(?:{_UNIT_WORDS_RE_PART})\b)", re.IGNORECASE)
+# a veg signal (word in the name, or in the category with no non-veg hint) alongside a non-veg
+# protein token means the dish is a veg-style imitation, not the real meat/egg dish.
+_VEG_CONFLICT_WORDS: frozenset[str] = frozenset({"veg", "vegetarian", "jain", "shakahari", "shaakahari"})
+
+
+def _kept_numbers(text: str) -> frozenset[str]:
+    outside = _PAREN_RE.sub(" ", text or "")
+    return frozenset(m.group(1) for m in _KEEP_NUM_RE.finditer(outside))
 
 
 def normalize(text: str) -> str:
@@ -65,15 +77,18 @@ def _canon(word: str) -> str:
     return SYNONYMS.get(single, single)
 
 
-def _is_noise(word: str) -> bool:
+def _is_noise(word: str, keep_numbers: frozenset[str] = frozenset()) -> bool:
     if word.isupper():
         return False
-    return word.isdigit() or len(word) == 1 or word in NOISE or _singular(word) in NOISE
+    if word.isdigit():
+        return word not in keep_numbers
+    return len(word) == 1 or word in NOISE or _singular(word) in NOISE
 
 
 def _tokens(text: str, fallback: bool) -> list[str]:
+    keep_numbers = _kept_numbers(text)
     words = _PHRASE_RE.sub(lambda m: PHRASES[m.group(1)], normalize(text)).split()
-    kept = [_canon(w) for w in words if not _is_noise(w)]
+    kept = [_canon(w) for w in words if not _is_noise(w, keep_numbers)]
     if not kept and fallback:
         kept = [_canon(w) for w in words]
     return list(dict.fromkeys(kept))
@@ -181,6 +196,17 @@ def _has_hint(padded: str, hints: frozenset[str]) -> bool:
     return any(f" {h} " in padded for h in hints)
 
 
+def _veg_conflict(proteins: frozenset[str], name: str, category: str) -> bool:
+    if not proteins:
+        return False
+    if _has_hint(f" {normalize(name)} ", _VEG_CONFLICT_WORDS):
+        return True
+    cat_padded = f" {normalize(category)} "
+    if _has_hint(cat_padded, DIET_HINTS_NONVEG):
+        return False
+    return _has_hint(cat_padded, _VEG_CONFLICT_WORDS)
+
+
 def _diet(proteins: frozenset[str], toks: list[str], name: str, category: str) -> str:
     # The dish name decides first; the category only breaks ties.
     if proteins - {"EGG"}:
@@ -225,13 +251,16 @@ def parse_dish(name: str, category: str = "", description: str = "", *, display:
     variants += [frozenset(main + o) for o in options]
     name_toks = main + [t for a in aliases for t in a]
     proteins = _proteins(name_toks)
+    diet = _diet(proteins, name_toks, name, category)
+    if _veg_conflict(proteins, name, category):
+        diet, proteins = "veg", frozenset()
     return DishQuery(
         raw=name,
         display=" ".join((name if display is None else display).split()),
         base_key=size_base_key(name),
         variants=tuple(dict.fromkeys(variants)),
         head=item_head(name, category),
-        diet=_diet(proteins, name_toks, name, category),
+        diet=diet,
         proteins=proteins,
         is_combo=is_combo_name(name),
         category=category,
