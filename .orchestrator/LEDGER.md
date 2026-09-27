@@ -18,3 +18,4 @@
 - 2026-09-27T08:11:04Z FIX-QUEUE: tools/*.py must be runnable as scripts (insert repo root on sys.path); README says python tools/build_seed_pool.py
 - 2026-09-27T08:11:48Z dispatch T02 (sonnet)
 - 2026-09-27T08:19:48Z T02 PASS. dispatch T03 (opus)
+- 2026-09-27T08:29:21Z T03 PASS (concern: diet precedence -> forwarded to T06 Notes). dispatch T06 (opus)
