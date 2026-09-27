@@ -33,7 +33,7 @@ Measured facts: CLIP embeddings of photos are stored per image URL in the pool D
 3. I3: app.py `--self-test` and server startup try `import onnxruntime`; failure -> /api/system status "Visual check needs the Microsoft VC++ runtime" and self-test prints the plain-English message with the link and returns 1. setup.ps1: after libraries, run `& $Py -c "import onnxruntime"`; if it fails, download https://aka.ms/vs/17/release/vc_redist.x64.exe to $HomeDir and run it with `/install /passive /norestart` (Windows shows one admin prompt; tell the user "Click Yes to install a Microsoft component"), then re-test; still failing -> Write-Host a yellow warning (the app still runs text-only). README Troubleshooting mentions it.
 4. M1: a pool-only chain (no chain_outlets entity from Zomato) requires >= 3 restaurants with the same chain_key AND at least one token of the name not in brand.GENERIC; the user's own zomato_url menu is always included in the source set.
 5. M2: choose_alternate runs the BrandGuard on the chosen alternate's full image; branded -> ValueError("That photo shows <brand> branding — pick another").
-6. M10: pin uv in setup.ps1 to a specific release URL (use version 0.9.5: `https://github.com/astral-sh/uv/releases/download/0.9.5/uv-x86_64-pc-windows-msvc.zip`); keep the `latest` URL only as a fallback when the pinned one 404s.
+6. M10: pin uv in setup.ps1 to a specific release URL (use version 0.12.19 (verified 200 OK on 2026-09-27): `https://github.com/astral-sh/uv/releases/download/0.12.19/uv-x86_64-pc-windows-msvc.zip`); keep the `latest` URL only as a fallback when the pinned one 404s.
 
 ## Test cases
 - TC1..TC2: close gate as in step 1.
