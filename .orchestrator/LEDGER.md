@@ -5,3 +5,4 @@
 - 2026-09-27T17:04:41Z S1 NEEDS_CONTEXT: old test asserted Devanagari reject (now intended to match). Ruling: add test_matcher.py to write-set; keep intent with Tamil + add Devanagari-matches assertion.
 - 2026-09-27T17:07:39Z S1 PASS. Audit of 74 real corrections: 3 wrong (kanduri, mith, nag) -> S1B. dispatch S1B (sonnet)
 - 2026-09-27T17:12:10Z S1B PASS. dispatch S2 (sonnet)
+- 2026-09-27T17:25:03Z S2 PASS. DATA2 crawl started.
