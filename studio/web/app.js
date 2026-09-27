@@ -255,6 +255,9 @@ function renderSystem() {
   } else if (!system.ready) {
     const failed = system.status.startsWith("Engine failed");
     box.append(failed ? pill(system.status, "red", "alert") : pill(system.status, "blue", "spin"));
+  } else if (!system.vision) {
+    const msg = system.status && system.status !== "Ready" ? system.status : "Visual check unavailable";
+    box.append(pill(msg, "orange", "alert"));
   } else if (!system.keys) {
     box.append(h("a", { class: "pill orange", href: "#/settings" }, icon("key"), "No ImgBB key — add one"));
   } else {
