@@ -26,3 +26,12 @@ smartbiz_NOVEL_PENDING.xlsx
 # ...except the baked photo pool + default template the app needs:
 !data/pairs.json
 !data/smartbiz_template.xlsx
+
+# ---- v2 ----
+config/
+outputs/
+.venv/
+*.tmp
+*.bad
+!tests/fixtures/**
+!data/seed_pool.jsonl.gz
