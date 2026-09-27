@@ -37,3 +37,4 @@
 - 2026-09-27T12:37:09Z UIFIX PASS. Headless Edge min layout width is 496px (phone clipping was an artifact); true 390px verified via iframe. dispatch T13 (sonnet)
 - 2026-09-27T12:47:20Z Ruling: T13 Verify line 2 was a plan defect (bash expanded $e/$_ inside double quotes); single-quoted it. Fresh-PC sim: uv + Python 3.12 + 49 pkgs + SELF-TEST OK.
 - 2026-09-27T12:47:52Z T13 PASS. dispatch T15 (sonnet); orchestrator re-evaluates 6 menus in parallel (read-only)
+- 2026-09-27T12:52:22Z T15 PASS. All build tasks done; EVAL re-run in progress.

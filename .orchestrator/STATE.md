@@ -35,7 +35,7 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] TUNE3 Brand guard (OCR) — done 8383ae6..b472967 (gate PASS)
 - [x] UIFIX — done 2496c43..5e8f08b (gate PASS; 390px verified via iframe since headless min width is 496px; light+dark OK)
 - [x] T13 Launcher + README — o15 — done 67fe2cb..ed8b2a9 (gate PASS after Verify-quoting ruling; fresh-PC sim SELF-TEST OK)
-- [~] T15 Eval tool — o16 — attempt=1
+- [x] T15 Eval tool — o16 — done 3f43ca5..470b6f8 (gate PASS)
 - [ ] EVAL Live eval + audit + tuning (orchestrator) — deps T15 DATA1
 - [ ] FINAL verify-all, final review, FIX1, push prodv2.0
 
