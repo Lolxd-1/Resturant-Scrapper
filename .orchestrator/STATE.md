@@ -21,7 +21,7 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [~] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — running, log %LOCALAPPDATA%MenuStudioseed_crawl.log
 - [x] T02 Menu reader — o5 — done 2c0ac0e..1f40f76 (gate PASS)
 - [x] T03 Lexicon + text — o6 — done 0e9016a..d9e5c07 (gate PASS)
-- [~] T06 Matcher + golden set — o7 — attempt=1
+- [~] T06 Matcher + golden set — o7 — attempt=1 fix-round=1 agent=a04dd7d9f85786e55
 - [ ] T07 Imaging + vision — o8 — deps T03 T04 T05
 - [ ] T08 ImgBB uploader — o9 — deps T05
 - [ ] T09 Sheets builder — o10 — deps T01

@@ -19,3 +19,4 @@
 - 2026-09-27T08:11:48Z dispatch T02 (sonnet)
 - 2026-09-27T08:19:48Z T02 PASS. dispatch T03 (opus)
 - 2026-09-27T08:29:21Z T03 PASS (concern: diet precedence -> forwarded to T06 Notes). dispatch T06 (opus)
+- 2026-09-27T08:49:24Z T06 review CHANGES_REQUIRED (1 critical combo, 2 important) + orchestrator live-pool findings; fix round 1 -> resume T06 executor
