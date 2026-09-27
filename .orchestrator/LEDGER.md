@@ -33,3 +33,4 @@
 - 2026-09-27T11:54:15Z Live evals + real job in app (18/18 uploaded). Findings -> TUNE1 (vision veto), TUNE2 (chain), TUNE3 (OCR brand guard: 2/278 zomato props), UIFIX. dispatch TUNE1 (sonnet)
 - 2026-09-27T12:02:43Z TUNE1 PASS. dispatch TUNE2 (opus)
 - 2026-09-27T12:06:22Z TUNE2 PASS (+ veg safety fix in same_dish_menu_match fuzzy fallback). dispatch TUNE3 (sonnet)
+- 2026-09-27T12:21:21Z TUNE3 PASS (executor hit maxTurns after committing code; report committed by checkpoint). dispatch UIFIX (sonnet)
