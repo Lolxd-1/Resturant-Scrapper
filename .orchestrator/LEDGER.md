@@ -26,3 +26,4 @@
 - 2026-09-27T09:24:39Z T09 NEEDS_CONTEXT (template load+save floor ~25-35 s). Ruling: TC8 <= 60 s, single template load reused; swaps rebuild sheets asynchronously (notes added to T10B, T11) — cost if wrong: slower job end by ~15 s.
 - 2026-09-27T09:27:44Z T09 PASS. dispatch T10 (opus)
 - 2026-09-27T10:27:52Z T10 PASS with concerns; created T10F (sheets clear bug = correctness, store per-restaurant load = perf, blocked reset). dispatch T10F (sonnet)
+- 2026-09-27T10:36:52Z T10F PASS. dispatch T10B (sonnet). Orchestrator starts first live dry run (Shivraj) outside the repo.

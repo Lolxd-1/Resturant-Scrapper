@@ -26,8 +26,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T08 ImgBB uploader — o9 — done 80915bd..d55a628 (gate PASS + live rotation test)
 - [x] T09 Sheets builder — o10 — done a7011b3..ce67e5c (gate PASS, round 1 ruling)
 - [x] T10 Pipeline engine — o11 — done d304e0f..b80ac80 (gate PASS; 3 defects -> T10F)
-- [~] T10F Fix sheet clear, per-restaurant load, blocked reset — attempt=1
-- [ ] T10B Photo swap + CLI — o12 — deps T10
+- [x] T10F Fix sheet clear, per-restaurant load, blocked reset — done 0653912..274a102 (gate PASS)
+- [~] T10B Photo swap + CLI — o12 — attempt=1
 - [ ] T11 Server + app.py — o13 — deps T10B
 - [ ] T12 Web UI — o14 — deps T11
 - [ ] T13 Launcher + README — o15 — deps T11
