@@ -19,8 +19,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T05 Pool store — o3 — done fc7b91f..29a74af (gate PASS)
 - [x] T14 Seed pool builder tool — o4 — done b70c54a..7aadf3b (gate PASS)
 - [~] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — running, log %LOCALAPPDATA%MenuStudioseed_crawl.log
-- [~] T02 Menu reader — o5 — attempt=1
-- [ ] T03 Lexicon + text — o6 — deps T01
+- [x] T02 Menu reader — o5 — done 2c0ac0e..1f40f76 (gate PASS)
+- [~] T03 Lexicon + text — o6 — attempt=1
 - [ ] T06 Matcher + golden set — o7 — deps T03 T05
 - [ ] T07 Imaging + vision — o8 — deps T03 T04 T05
 - [ ] T08 ImgBB uploader — o9 — deps T05

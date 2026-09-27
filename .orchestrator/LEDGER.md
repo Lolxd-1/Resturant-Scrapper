@@ -17,3 +17,4 @@
 - 2026-09-27T08:10:48Z T14 PASS. Starting DATA1 crawl in background.
 - 2026-09-27T08:11:04Z FIX-QUEUE: tools/*.py must be runnable as scripts (insert repo root on sys.path); README says python tools/build_seed_pool.py
 - 2026-09-27T08:11:48Z dispatch T02 (sonnet)
+- 2026-09-27T08:19:48Z T02 PASS. dispatch T03 (opus)
