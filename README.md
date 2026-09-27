@@ -1,104 +1,141 @@
-# Resturant-Scrapper PROD v1.0
+# Menu Studio
 
-Free pipeline that takes **any vendor's menu Excel** (dish names + prices),
-finds the **best-quality photo for every dish from Zomato**, hosts the photos
-on **ImageBB** (free), and fills the **Amazon SmartBiz bulk-upload sheet** —
-ready to upload, zero rupees spent. Team use: 1–2 people at a time via a
-Streamlit web app (free hosting).
+Menu Studio takes a vendor's menu Excel and turns it into ready-to-upload
+Amazon SmartBiz sheets, complete with the best-quality dish photo it can find
+on Zomato for every item — no photography needed for most dishes. It runs as
+a local web app (`app.py`) with five stages behind the scenes:
 
 ```
 YOUR MENU EXCEL
       │
       ▼
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌──────────────┐
-│ 1. HARVEST  │──▶│  2. MATCH  │──▶│3. DOWNLOAD  │──▶│  4. UPLOAD  │──▶│   5. BUILD   │
-│ Zomato menus│   │ your dish = │   │ quality gate│   │ ImageBB   │   │ SmartBiz     │
-│ + dish pics │   │ which photo?│   │ + fallback  │   │ hosting   │   │ Excel files  │
+│ 1. HARVEST  │──▶│  2. MATCH   │──▶│3. DOWNLOAD  │──▶│  4. UPLOAD  │──▶│   5. BUILD   │
+│ Zomato menus│   │ your dish = │   │ quality gate│   │ ImgBB      │   │ SmartBiz     │
+│ + dish pics │   │ which photo?│   │ + fallback  │   │ hosting    │   │ Excel files  │
 └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └──────────────┘
 ```
 
-## Use it (any Windows PC — 3 steps, no tech skills)
+## Use it
 
-1. Install Python once: https://www.python.org/downloads/
-   (tick **"Add python.exe to PATH"** on the first screen).
-2. GitHub repo page → green **Code** button → **Download ZIP** → extract it.
-3. Double-click **`RUN_ME.bat`** → browser opens the app automatically.
+1. On the GitHub repo page, click the green **Code** button → **Download
+   ZIP** → extract it somewhere convenient (a OneDrive folder or a path with
+   spaces is fine).
+2. Double-click **`RUN_ME.bat`**.
+   - **First time:** it downloads a private Python and the libraries it
+     needs, then opens Menu Studio in your browser automatically. This takes
+     **3-8 minutes** and needs about **1.5 GB of free disk space** (for the
+     one-time setup plus the visual-check model). Nothing is installed
+     system-wide and no admin rights are required.
+   - **Every time after:** it starts in a few seconds. If Menu Studio is
+     already running, double-clicking again just opens it in your browser.
+3. In the app: type the vendor name, upload the menu Excel, add your ImgBB
+   key(s), and click **Run pipeline**.
 
-Then: type vendor name → upload menu Excel → paste ImageBB key →
-**Run pipeline** → download the two sheets. Keep the black window open
-while using it; close it to stop. A ~100-dish run takes 10–20 minutes
-(progress bar shows it working — that is normal, not frozen).
+If anything goes wrong, `RUN_ME.bat` prints a plain-English message and
+waits for a key so you can read it — see **Troubleshooting** below.
 
-## Use it (hosted Streamlit URL — same app, no PC needed)
+## Settings: ImgBB keys
 
-1. Open the Streamlit app URL (see Deployment below).
-2. Type vendor name (SKU prefix auto-derives, editable — `HFC-001`…).
-3. Upload the menu Excel. Format, row 1: `Item Name | Category | Description | Price`.
-4. Paste the team ImageBB key (or the deployer saved it in app Secrets).
-5. **Run pipeline** → download `*_UPLOAD_READY.xlsx` (upload to SmartBiz as-is)
-   and `*_NOVEL_PENDING.xlsx` (imageless dishes — shoot real kitchen photos).
-6. **Spot-check photos before uploading.** A wrong photo is worse than no photo.
+Menu Studio hosts dish photos on [ImgBB](https://api.imgbb.com/) (free)
+before writing their URLs into the SmartBiz sheet.
 
-## Use it (CLI, local)
+1. Go to https://api.imgbb.com/, sign up, and copy your free API key.
+2. In Menu Studio's settings, add **2-4 keys** (from your own account or
+   teammates' accounts).
+3. Why more than one: ImgBB free keys are rate-limited; a large menu run
+   uploads many photos, and having several keys lets the app spread uploads
+   across them instead of stalling on one.
+
+## Your menu Excel
+
+The app reads whichever columns exist and figures out the closest match to:
+
+| Column | Notes |
+| --- | --- |
+| Item Name | required |
+| Category | maps to the SmartBiz Product Category |
+| Description | optional |
+| Price | optional — blank prices are fine, the dish still gets matched and photographed |
+
+Headers are matched flexibly (e.g. "Dish", "Item", "Product Name" all work
+for the name column), so you rarely need to rename anything before
+uploading.
+
+## What you get
+
+After a run, in `outputs/<job>/` you get:
+
+- **`*_SmartBiz_UPLOAD_READY.xlsx`** — dishes with a confirmed photo,
+  formatted for direct SmartBiz bulk upload.
+- **`*_SmartBiz_PENDING.xlsx`** — dishes the app could not confidently
+  photograph (no price, no safe photo match, etc.) — fill these in by hand.
+- **Photo Report + owner checklist** — a page listing every matched photo
+  next to the dish name, so the restaurant owner can eyeball and approve (or
+  flag) picks before anything goes live.
+
+## How accuracy works
+
+- The app first tries the vendor's **own Zomato listing and any known chain
+  menus**, then falls back to a **whole-Zomato live search across ~20
+  cities** for the same dish.
+- Matching uses strict rules (word-by-word fuzzy matching, category checks,
+  non-veg/veg safety, one photo per dish) so a look-alike dish from a
+  different cuisine is not picked by accident.
+- Every candidate photo also goes through a **visual check** (and an OCR
+  brand guard that skips any photo showing a Zomato, Swiggy, or other
+  delivery-chain logo).
+- The app **never guesses a wrong photo on purpose** — if it isn't
+  confident, the dish goes to the `_PENDING` sheet and the owner checklist
+  instead of getting a bad photo.
+
+## Troubleshooting
+
+- **The black window flashes and closes** — double-click `RUN_ME.bat` again;
+  it now pauses on every failure so you can read the message. If it still
+  closes instantly, run it from a Command Prompt (`RUN_ME.bat`) to see the
+  full output.
+- **"Port busy" / app won't start** — another program is using the port;
+  close it and double-click `RUN_ME.bat` again.
+- **No internet during the first run** — the one-time setup needs to
+  download Python and libraries (~400 MB) plus a visual-check model
+  (~600 MB); connect to the internet and try again.
+- **Antivirus warnings** — the setup script downloads `uv` (a small,
+  official Python installer tool) from GitHub; if your antivirus blocks it,
+  allow `scripts\setup.ps1` and `RUN_ME.bat`, or ask IT to allowlist them.
+- **"Zomato is limiting requests"** — Zomato is rate-limiting this network;
+  wait a while and re-run, or try from a different connection.
+- **Reset everything** — close the app, delete the folder
+  `%LOCALAPPDATA%\MenuStudio`, and double-click `RUN_ME.bat` again for a
+  clean first-time setup.
+
+## For developers
 
 ```bash
-pip install -r requirements.txt
-set IMGBB_API_KEY=your_free_key   # https://api.imgbb.com/ (never commit this!)
-python zomato_scrapper.py --menu-excel "Menu.xlsx" ^
-    --template "data/smartbiz_template.xlsx" --out ./smartbiz_out ^
-    --sku-prefix HFC --stage all
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
+pytest
 ```
 
-Stages run separately: `--stage harvest | match | download | build`.
-Re-runs are idempotent: unchanged picks log `KEEP`, only new picks upload.
+CLI usage (no web UI):
 
-## How matching stays honest (read before onboarding a vendor)
+```bash
+python zomato_scrapper.py --menu-excel "Menu.xlsx" --vendor "Vendor Name" ^
+    --sku-prefix HFC --out ./outputs
+```
 
-- Word-by-word fuzzy match with spelling groups (`sev=shev`, `gobi=flower`),
-  generic plural handling (`corns→corn`), size/stop words, non-veg ban,
-  papad-only-papad rule, one-photo-per-dish (size variants may share).
-- Coverage ≥ 0.66 and score ≥ 0.4 required, else the dish goes imageless.
-- Every match run prints **POOL-GAP vs MATCHER-GAP** diagnostics per miss:
-  - `POOL-GAP` → the photo pool lacks that dish family → add chain seeds,
-    re-harvest, commit the new `data/pairs.json`.
-  - `MATCHER-GAP` → pool has candidates but all score too low → fix
-    `toks`/`STOP`/`CANON`, never lower thresholds blindly.
-- `NOVEL_DISHES` starts empty; add a dish only after eye-check proves its
-  auto-pick is category-wrong. `MANUAL_OVERRIDES` likewise (verify the target
-  exists in `pairs.json` with a big file first).
+Other tools:
 
-## Onboarding a very different vendor
-
-1. Check `CUISINE_TARGETS` covers their food (add cuisine slugs if not).
-2. If their dishes live in delivery chains not yet seeded, add verified
-   `/order` URLs to `CHAIN_SEEDS` (verify HTTP 200 + parseable menu first —
-   guessed slugs just log `0 imaged items`).
-3. Run harvest locally, eye-check risky picks, commit the refreshed
-   `data/pairs.json`. The hosted app never harvests (cloud IPs get bot-walled;
-   CDN + ImageBB traffic is fine).
-
-## Deployment (Streamlit Community Cloud, $0)
-
-1. Push this repo to GitHub (branch `prodv1.0`).
-2. https://share.streamlit.io → New app → repo `Lolxd-1/Resturant-Scrapper`,
-   branch `prodv1.0`, main file `app.py`.
-3. App settings → Secrets: `IMGBB_API_KEY = "team-key"` (or paste per run).
-4. Deploy. App sleeps after 12 h idle; anyone opening the URL wakes it.
-   Limits that matter: ~1 GB RAM (this app uses far less), 1–2 concurrent
-   users is fine (each run gets its own temp dir).
-
-Why not Vercel: Hobby functions cap at 5 minutes; one vendor run needs
-10–30 minutes of downloads/uploads. Serverless timeouts would kill it.
-
-## Files
-
-- `app.py` — Streamlit front-end (upload → run → download).
-- `zomato_scrapper.py` — the pipeline (harvest → match → download → upload → build).
-- `data/pairs.json` — baked photo pool (12,317 Zomato dish photos; refresh via harvest).
-- `data/smartbiz_template.xlsx` — bundled SmartBiz template (or upload your own).
-- `requirements.txt` — `requests`, `Pillow`, `openpyxl`, `streamlit` (all free).
+- `tools/build_seed_pool.py` — crawl Zomato and (re)build the baked photo
+  pool used for offline matching (`--crawl`, `--cities`, `--cuisines`,
+  `--export`).
+- `tools/eval_menus.py` — run the pipeline against a folder of real menu
+  Excels and report per-dish accuracy, used to catch regressions before a
+  release.
 
 ## Never commit
 
-API keys, `.streamlit/secrets.toml`, vendor menu Excels, `zcache/`,
-per-run outputs (`smartbiz_out*/`, `zimages/`, results/picks JSON).
+- `config/` (local settings, API keys)
+- `outputs/` (per-run results)
+- vendor menu Excels

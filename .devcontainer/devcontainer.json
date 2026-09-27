@@ -17,9 +17,9 @@
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
+  "updateContentCommand": "pip3 install --user -r requirements.txt",
   "postAttachCommand": {
-    "server": "streamlit run zomato_scrapper.py --server.enableCORS false --server.enableXsrfProtection false"
+    "server": "python app.py --no-browser --host 0.0.0.0 --port 8501"
   },
   "portsAttributes": {
     "8501": {
