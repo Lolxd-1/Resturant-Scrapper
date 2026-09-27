@@ -15,8 +15,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 
 ## Tasks
 - [x] T01 Scaffold, contracts, config, deps, dev venv — o1 — done 5a87e7e..5f6ff1e (gate PASS)
-- [~] T04 Zomato client + parsers — o2 — attempt=1
-- [ ] T05 Pool store — o3 — deps T01 T04
+- [x] T04 Zomato client + parsers — o2 — done f3e3014..4c3ac28 (gate PASS; scope hit = orchestrator .gitignore fix)
+- [~] T05 Pool store — o3 — attempt=1
 - [ ] T14 Seed pool builder tool — o4 — deps T04 T05
 - [ ] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — deps T14
 - [ ] T02 Menu reader — o5 — deps T01

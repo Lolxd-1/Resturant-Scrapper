@@ -11,3 +11,5 @@
 - 2026-09-27T07:38:56Z Ruling: orch-executor/orch-reviewer not registered in this session (kit installed mid-session) — dispatch general-purpose with an explicit model and the instruction to follow .claude/agents/orch-executor.md (or orch-reviewer.md) verbatim — cost if wrong: executor has extra tools; the gate still enforces scope.
 - 2026-09-27T07:44:26Z T01 gate PASS 5a87e7e..5f6ff1e. Vision bench: nomic-Q fine top1 0.23 (worse), jina-clip failed to load under cp1252 locale (tokenizer json read) -> keep CLIP; PYTHONUTF8=1 required in launcher. User supplied an ImgBB key mid-run; stored in git-ignored config/settings.json as 'Team key 1'.
 - 2026-09-27T07:44:44Z dispatch T04 (sonnet)
+- 2026-09-27T07:59:32Z Ruling: removed '!tests/fixtures/**' from .gitignore (my T01 brief defect: un-ignored __pycache__) — fixtures are generated in code — cost if wrong: none. T04 TC12 threshold 180->140 accepted (144 real restaurants with photos; 20,459 items matches recon).
+- 2026-09-27T07:59:56Z T04 PASS (ruled). dispatch T05 (sonnet)
