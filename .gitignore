@@ -35,3 +35,6 @@ outputs/
 *.bad
 !data/seed_pool.jsonl.gz
 !studio/web/*.html
+
+# Vendor menus and eval outputs must never be committed
+eval/
