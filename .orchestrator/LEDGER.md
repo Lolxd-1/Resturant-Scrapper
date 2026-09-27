@@ -4,3 +4,4 @@
 - 2026-09-27T16:53:17Z Ruling: autonomous (user asked to fix). Recon: 58/85 distinct misses match once spelled right. dispatch S1 (opus)
 - 2026-09-27T17:04:41Z S1 NEEDS_CONTEXT: old test asserted Devanagari reject (now intended to match). Ruling: add test_matcher.py to write-set; keep intent with Tamil + add Devanagari-matches assertion.
 - 2026-09-27T17:07:39Z S1 PASS. Audit of 74 real corrections: 3 wrong (kanduri, mith, nag) -> S1B. dispatch S1B (sonnet)
+- 2026-09-27T17:12:10Z S1B PASS. dispatch S2 (sonnet)
