@@ -195,7 +195,7 @@ def test_tc5_crawl_blocked_twice_returns_cleanly(tmp_path, monkeypatch):
 
 def test_s2_tc4_crawl_localities_requests_locality_listing_urls(tmp_path):
     fake_session = FakeSession()
-    fake_session.add("https://www.zomato.com/pune/restaurants",
+    fake_session.add("https://www.zomato.com/pune",
                       FakeResponse(200, text=(
                           '<a href="/pune/kothrud-restaurants">Kothrud</a>'
                           '<a href="/pune/baner-restaurants">Baner</a>'

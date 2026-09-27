@@ -372,7 +372,8 @@ class ZomatoClient:
         return _extract_res_urls(resp.text, city)
 
     def localities(self, city: str) -> list[str]:
-        resp = self.http.get(f"https://www.zomato.com/{city}/restaurants")
+        # Locality links live on the city home page, not on /<city>/restaurants.
+        resp = self.http.get(f"https://www.zomato.com/{city}")
         if resp is None:
             return []
         pattern = re.compile(rf"/{re.escape(city)}/([a-z0-9-]+)-restaurants(?:[/\"?]|$)")
