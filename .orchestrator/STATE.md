@@ -36,9 +36,9 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] UIFIX — done 2496c43..5e8f08b (gate PASS; 390px verified via iframe since headless min width is 496px; light+dark OK)
 - [x] T13 Launcher + README — o15 — done 67fe2cb..ed8b2a9 (gate PASS after Verify-quoting ruling; fresh-PC sim SELF-TEST OK)
 - [x] T15 Eval tool — o16 — done 3f43ca5..470b6f8 (gate PASS)
-- [~] EVAL Live eval + audit (orchestrator) — re-eval done: SBH 18/18, HFC 89/101, GEV 72/81, GB 62/65 (3 need price), LPP 34/35, DP 30/30 = 305/330 (92.4%); photo audit pending
-- [~] FIX1 Swap/rebuild concurrency, honest downloads — attempt=1
-- [ ] FIX2 Robustness (discovery exceptions, transient bad-image marks, used_images, column priority, url validation, atomic writes) — deps FIX1
+- [x] EVAL — 305/330 (92.4%) coverage, 1 wrong + 2 borderline of 305 (99.7% precision); evidence .orchestrator/reports/eval.md
+- [x] FIX1 Swap/rebuild concurrency, honest downloads — done 002d647..d8cd1fc (gate PASS)
+- [~] FIX2 Robustness (discovery exceptions, transient bad-image marks, used_images, column priority, url validation, atomic writes) — deps FIX1
 - [ ] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — deps FIX2
 - [ ] FINAL verify-all, final review, FIX1, push prodv2.0
 

@@ -57,4 +57,5 @@ powershell -NoProfile -Command '$e=$null; [void][System.Management.Automation.La
 - `_combine_scores` TODO(human).
 
 ## Notes
+- From EVAL: La Pino'z dish "Non Veg Pack Of 4" (menu category from the real La Pino'z menu) exists verbatim on the chain menu but ended needs_photo "Only uncertain matches found (best: Non Veg Pack Of 4 @ La Pino'z Pizza)" -> the exact own/chain match was dropped in the verify stage (likely treated as tier close because of the combo cap, or a vision veto on a multi-item photo). Own/chain exact-name matches must bypass the close-tier gate and the soft head veto (keep the food check and the hard veto). Add a pipeline test.
 - Commit code first, then the report. Keep turns low.
