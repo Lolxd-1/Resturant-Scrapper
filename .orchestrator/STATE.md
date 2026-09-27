@@ -15,7 +15,8 @@ tests: 286 passed. Hotel Gavkari (user's run, latest build): 111/215 ready (52%)
 - [x] S1 Spelling/script normalization — done 10c1c09..1997a2e (gate PASS after 1 ruling)
 - [x] S1B Protect local words — done 0bb2c52..738b1c8 (gate PASS; RED->GREEN on all 3)
 - [x] S2 Word-driven discovery + locality crawl — done c87a672..6505a8d (gate PASS)
-- [~] DATA2 Maharashtra-deep seed crawl — running
+- [~] DATA2 Maharashtra-deep seed crawl — rerun after XS fix f4b20c4 (localities) running
+- [~] S3 Fix 4 wrong Gavkari picks (veg imitation, dish numbers, lachha) — attempt=1
 - [ ] EVAL2 Gavkari + 6-menu regression, audit — deps DATA2
 
 ## Open questions
