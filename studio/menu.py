@@ -23,7 +23,8 @@ _ROLE_SYNONYMS = {
         "item name", "item", "dish", "dish name", "name", "product",
         "product name", "menu item", "particulars",
     },
-    "category": {"category", "section", "type", "menu category", "group", "course"},
+    "category": {"category", "section", "menu category"},
+    "category_secondary": {"type", "group", "course"},
     "description": {"description", "desc", "details", "item description", "about"},
     "price": {
         "price", "rate", "mrp", "amount", "cost", "selling price",
@@ -121,6 +122,12 @@ def _detect_header(row: tuple) -> dict[str, int] | None:
                 continue
             if norm in _ROLE_SYNONYMS[role]:
                 columns[role] = idx
+                break
+    if "category" not in columns:
+        for idx, raw in enumerate(row):
+            norm = _normalize_header_cell(raw)
+            if norm in _ROLE_SYNONYMS["category_secondary"]:
+                columns["category"] = idx
                 break
     if "name" in columns and ("price" in columns or "category" in columns):
         return columns

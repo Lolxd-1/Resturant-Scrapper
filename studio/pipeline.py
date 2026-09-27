@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import re
 import shutil
 import threading
@@ -22,7 +21,7 @@ from rapidfuzz import fuzz
 
 from studio import imaging, sheets
 from studio.brand import BrandGuard, brand_words_from_pool
-from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, models_dir, pool_db_path
+from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, atomic_write_text, models_dir, pool_db_path
 from studio.hosting import UploadError, Uploader
 from studio.lexicon import HEAD_CUISINES, HEAD_GROUP
 from studio.matcher import PoolIndex, rank, same_dish_menu_match
@@ -187,16 +186,7 @@ def job_lock(job_dir: Path) -> threading.RLock:
 
 
 def _write_json(path: Path, data) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    for attempt in range(5):
-        try:
-            os.replace(tmp, path)
-            return
-        except PermissionError:
-            if attempt == 4:
-                raise
-            time.sleep(0.02)
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 def _head_keep(margins: np.ndarray, tiers: list[str]) -> list[bool]:
@@ -542,6 +532,8 @@ class _Run:
                     names.append(menu.name)
         except ZomatoBlocked:
             self._blocked()
+        except Exception as exc:
+            log.warning("source: vendor lookup failed for %s: %s", opts.vendor, exc)
         if not names:
             self.say("Vendor not found on Zomato; using photos from other restaurants")
             return
@@ -633,9 +625,17 @@ class _Run:
                     cuisines = HEAD_CUISINES.get(g.q.head, DEFAULT_CUISINES)[:2]
                     urls = []
                     for city in round_cities:
-                        urls += cached("suggest", text, city)
+                        try:
+                            urls += cached("suggest", text, city)
+                        except Exception as exc:
+                            log.warning("search: suggest failed for %s: %s", city, exc)
+                            continue
                         for cuisine in cuisines:
-                            urls += cached("listing", city, cuisine)
+                            try:
+                                urls += cached("listing", city, cuisine)
+                            except Exception as exc:
+                                log.warning("search: listing failed for %s/%s: %s", city, cuisine, exc)
+                                continue
                     per_group.append(urls)
                     self.stage("search", (i + 1) / len(unresolved))
                 targets = []
@@ -704,11 +704,12 @@ class _Run:
                 if vec is not None:
                     vecs[c.item.img_url] = vec
         need = [c for c in top if c.item.img_url not in vecs]
-        thumbs = list(pool.map(lambda c: imaging.fetch_thumb(c.item.img_url, engine.http), need))
+        thumbs = list(pool.map(lambda c: imaging.fetch_thumb_ex(c.item.img_url, engine.http), need))
         fetched = []
-        for c, thumb in zip(need, thumbs):
+        for c, (thumb, reason) in zip(need, thumbs):
             if thumb is None:
-                store.mark_bad_image(c.item.img_url, "thumb failed")
+                if reason != "network":
+                    store.mark_bad_image(c.item.img_url, "thumb failed")
             else:
                 fetched.append((c.item.img_url, thumb))
         if vision.available and fetched:
@@ -801,9 +802,13 @@ class _Run:
             + first.alternates
         branded = ""
         for opt in options:
-            got = imaging.fetch_full(opt["zomato_img"], self.engine.http)
+            is_fallback = opt is not options[0]
+            if is_fallback and self.used_images.get(opt["zomato_img"], g.key) != g.key:
+                continue
+            got, reason = imaging.fetch_full_ex(opt["zomato_img"], self.engine.http)
             if got is None:
-                self.engine.store.mark_bad_image(opt["zomato_img"], "download failed")
+                if reason != "network":
+                    self.engine.store.mark_bad_image(opt["zomato_img"], "download failed")
                 continue
             jpeg, (w, h) = got
             hit = self.brand_guard.brands_in(jpeg)
@@ -812,12 +817,14 @@ class _Run:
                 self.say(f"Skipped a photo showing {branded} for {first.name}")
                 continue
             for r in g.rows:
-                if opt is not options[0]:
+                if is_fallback:
                     _apply_pick(r, opt)
                     r.alternates = [a for a in r.alternates if a["zomato_img"] != opt["zomato_img"]]
                 r.local_image = f"images/{r.sku}.jpg"
                 r.image_size = f"{w}x{h}"
                 (self.job_dir / r.local_image).write_bytes(jpeg)
+            if is_fallback:
+                self.used_images[opt["zomato_img"]] = g.key
             return
         for r in g.rows:
             r.reason = (f"Only photos with {branded} branding found — ask the owner for a photo"

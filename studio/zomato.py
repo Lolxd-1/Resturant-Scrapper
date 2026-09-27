@@ -143,7 +143,7 @@ class Http:
             self._throttle(host)
             try:
                 resp = self.session.get(url, params=params, timeout=self.timeout)
-            except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as exc:
+            except requests.RequestException as exc:
                 if attempt == attempts:
                     log.warning("zomato request failed: %s (%s)", url, exc)
                     return None
@@ -294,7 +294,7 @@ def parse_menu(state: dict, fallback_url: str = "") -> RestaurantMenu | None:
                         city=city,
                         chain_key=ck,
                     ))
-    except (KeyError, TypeError) as exc:
+    except (KeyError, TypeError, AttributeError) as exc:
         log.debug("parse_menu: bad menu shape for %s: %s", url, exc)
         return None
 
@@ -332,6 +332,8 @@ class ZomatoClient:
         try:
             data = resp.json()
         except ValueError:
+            return SuggestResult(restaurants=[], chains=[], dishes=[])
+        if not isinstance(data, dict):
             return SuggestResult(restaurants=[], chains=[], dishes=[])
 
         restaurants: list[tuple[str, str]] = []

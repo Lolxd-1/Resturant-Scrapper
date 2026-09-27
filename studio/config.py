@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -42,6 +43,24 @@ def models_dir() -> Path:
     return p
 
 
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write text to path via a tmp file + os.replace, retrying ~2 s on PermissionError
+    (OneDrive/antivirus can briefly lock a file right after it's written)."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
+
+
 def load_settings(path: Path | None = None) -> Settings:
     path = path or CONFIG_PATH
     if not path.exists():
@@ -69,7 +88,4 @@ def load_settings(path: Path | None = None) -> Settings:
 
 def save_settings(settings: Settings, path: Path | None = None) -> None:
     path = path or CONFIG_PATH
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(asdict(settings), indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, json.dumps(asdict(settings), indent=2, ensure_ascii=False))

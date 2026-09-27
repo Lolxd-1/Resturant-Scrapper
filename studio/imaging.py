@@ -32,18 +32,25 @@ def _safe_get(url: str, http: Http):
         return None
 
 
-def fetch_thumb(url: str, http: Http) -> bytes | None:
+def fetch_thumb_ex(url: str, http: Http) -> tuple[bytes | None, str]:
     resp = _safe_get(url.split("?", 1)[0] + THUMB_SUFFIX, http)
-    if resp is None or resp.status_code != 200:
-        return None
+    if resp is None:
+        return None, "network"
+    if resp.status_code != 200:
+        return None, "http"
     content = resp.content
     if content is None or len(content) < 1500:
-        return None
+        return None, "invalid"
     try:
         img = Image.open(io.BytesIO(content))
         img.load()
     except Exception:
-        return None
+        return None, "invalid"
+    return content, ""
+
+
+def fetch_thumb(url: str, http: Http) -> bytes | None:
+    content, _ = fetch_thumb_ex(url, http)
     return content
 
 
@@ -60,21 +67,23 @@ def validate_photo(img: Image.Image) -> str | None:
     return None
 
 
-def fetch_full(
+def fetch_full_ex(
     url: str, http: Http, min_side: int = 400, max_side: int = 1600
-) -> tuple[bytes, tuple[int, int]] | None:
+) -> tuple[tuple[bytes, tuple[int, int]] | None, str]:
     resp = _safe_get(url.split("?", 1)[0], http)
-    if resp is None or resp.status_code != 200:
-        return None
+    if resp is None:
+        return None, "network"
+    if resp.status_code != 200:
+        return None, "http"
     content = resp.content
     try:
         img = Image.open(io.BytesIO(content))
         img.load()
     except Exception:
-        return None
+        return None, "invalid"
 
     if validate_photo(img) is not None:
-        return None
+        return None, "invalid"
 
     if img.mode in ("P", "RGBA", "LA"):
         rgba = img.convert("RGBA")
@@ -90,11 +99,18 @@ def fetch_full(
         img = img.resize((round(w * scale), round(h * scale)), Image.LANCZOS)
 
     if min(img.size) < min_side:
-        return None
+        return None, "invalid"
 
     buf = io.BytesIO()
     try:
         img.save(buf, format="JPEG", quality=88, optimize=True)
     except Exception:
-        return None
-    return buf.getvalue(), img.size
+        return None, "invalid"
+    return (buf.getvalue(), img.size), ""
+
+
+def fetch_full(
+    url: str, http: Http, min_side: int = 400, max_side: int = 1600
+) -> tuple[bytes, tuple[int, int]] | None:
+    result, _ = fetch_full_ex(url, http, min_side, max_side)
+    return result

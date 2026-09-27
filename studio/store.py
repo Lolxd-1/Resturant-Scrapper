@@ -256,5 +256,7 @@ class PoolStore:
 
     def is_bad_image(self, img_url: str) -> bool:
         with self._lock:
-            row = self._conn.execute("SELECT 1 FROM bad_images WHERE img_url = ?", (img_url,)).fetchone()
-        return row is not None
+            row = self._conn.execute("SELECT reason FROM bad_images WHERE img_url = ?", (img_url,)).fetchone()
+        if row is None:
+            return False
+        return not row[0].startswith("network")

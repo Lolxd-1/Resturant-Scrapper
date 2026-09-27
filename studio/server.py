@@ -5,7 +5,6 @@ import asyncio
 import io
 import json
 import logging
-import os
 import queue
 import re
 import shutil
@@ -17,13 +16,14 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import studio
-from studio.config import CONFIG_PATH, OUTPUT_DIR, load_settings, save_settings
+from studio.config import CONFIG_PATH, OUTPUT_DIR, atomic_write_text, load_settings, save_settings
 from studio.hosting import Uploader, test_key
 from studio.menu import read_menu
 from studio.models import ImgbbKey, Settings, dish_result_to_dict
@@ -49,6 +49,20 @@ SKU_RE = re.compile(r"^[A-Z0-9]{1,6}-\d{3,4}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9]{20,64}$")
 UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 FILE_KINDS = ("ready", "pending", "report")
+BAD_ZOMATO_URL_MESSAGE = "Open the link in your browser and paste the full zomato.com address"
+
+
+def _validate_zomato_url(raw: str) -> str:
+    raw = raw.strip()
+    if not raw:
+        return ""
+    if "zoma.to" in raw.lower():
+        raise HTTPException(400, BAD_ZOMATO_URL_MESSAGE)
+    url = raw if re.match(r"^https?://", raw, re.IGNORECASE) else f"https://{raw}"
+    host = urlsplit(url).netloc.lower()
+    if host not in ("zomato.com", "www.zomato.com"):
+        raise HTTPException(400, BAD_ZOMATO_URL_MESSAGE)
+    return url
 ENGINE_STATUS_MAP = {
     "Opening the photo library": "Loading photo pool…",
     "Loading the visual check": "Preparing visual check (first run downloads ~600 MB)…",
@@ -60,10 +74,7 @@ def _now() -> str:
 
 
 def _write_json(path: Path, data) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.replace(tmp, path)
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False))
 
 
 class EventBus:
@@ -426,7 +437,7 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
         settings = load_settings(config_path)
         city = str(body.get("city") or settings.default_city or "").strip().lower()
         opts = JobOptions(
-            vendor=vendor, city=city, zomato_url=str(body.get("zomato_url") or "").strip(),
+            vendor=vendor, city=city, zomato_url=_validate_zomato_url(str(body.get("zomato_url") or "")),
             sku_prefix=str(body.get("sku_prefix") or "").strip(),
             strictness=settings.strictness, live_search=settings.live_search,
             live_budget_menus=settings.live_budget_menus,
