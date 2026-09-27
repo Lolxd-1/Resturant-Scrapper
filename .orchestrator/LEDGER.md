@@ -7,3 +7,4 @@
 - 2026-09-27T08:10Z Ruling: vision = CLIP ViT-B/32 as verifier only (measured fine top1 0.27, coarse 0.72) — cost if wrong: re-tune weights in EVAL.
 - 2026-09-27T08:10Z Ruling: push to new branch prodv2.0 (repo convention prodv1.0); PR/merge to main left to user.
 - 2026-09-27T08:10Z Ruling: Streamlit removed; FastAPI + vanilla SPA — needed for Apple-grade UI and background jobs — cost if wrong: no hosted Streamlit URL (user said local PC use).
+- 2026-09-27T07:38:42Z dispatch T01 (sonnet)

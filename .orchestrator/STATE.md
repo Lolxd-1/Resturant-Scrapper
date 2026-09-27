@@ -14,7 +14,7 @@ Dispatch T01 (sonnet). User asked for autonomous completion ("Get it done ... pu
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
 
 ## Tasks
-- [ ] T01 Scaffold, contracts, config, deps, dev venv — o1
+- [~] T01 Scaffold, contracts, config, deps, dev venv — o1 — attempt=1
 - [ ] T04 Zomato client + parsers — o2 — deps T01
 - [ ] T05 Pool store — o3 — deps T01 T04
 - [ ] T14 Seed pool builder tool — o4 — deps T04 T05
