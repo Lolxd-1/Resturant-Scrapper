@@ -8,3 +8,6 @@
 - 2026-09-27T08:10Z Ruling: push to new branch prodv2.0 (repo convention prodv1.0); PR/merge to main left to user.
 - 2026-09-27T08:10Z Ruling: Streamlit removed; FastAPI + vanilla SPA — needed for Apple-grade UI and background jobs — cost if wrong: no hosted Streamlit URL (user said local PC use).
 - 2026-09-27T07:38:42Z dispatch T01 (sonnet)
+- 2026-09-27T07:38:56Z Ruling: orch-executor/orch-reviewer not registered in this session (kit installed mid-session) — dispatch general-purpose with an explicit model and the instruction to follow .claude/agents/orch-executor.md (or orch-reviewer.md) verbatim — cost if wrong: executor has extra tools; the gate still enforces scope.
+- 2026-09-27T07:44:26Z T01 gate PASS 5a87e7e..5f6ff1e. Vision bench: nomic-Q fine top1 0.23 (worse), jina-clip failed to load under cp1252 locale (tokenizer json read) -> keep CLIP; PYTHONUTF8=1 required in launcher. User supplied an ImgBB key mid-run; stored in git-ignored config/settings.json as 'Team key 1'.
+- 2026-09-27T07:44:44Z dispatch T04 (sonnet)

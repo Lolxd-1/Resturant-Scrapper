@@ -8,14 +8,14 @@ updated: 2026-09-27T08:10:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-Dispatch T01 (sonnet). User asked for autonomous completion ("Get it done ... push to github"), so no approval pause.
+Gate T04 after its executor returns; then T05, T14, DATA1 crawl.
 
 ## Baseline
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
 
 ## Tasks
-- [~] T01 Scaffold, contracts, config, deps, dev venv — o1 — attempt=1
-- [ ] T04 Zomato client + parsers — o2 — deps T01
+- [x] T01 Scaffold, contracts, config, deps, dev venv — o1 — done 5a87e7e..5f6ff1e (gate PASS)
+- [~] T04 Zomato client + parsers — o2 — attempt=1
 - [ ] T05 Pool store — o3 — deps T01 T04
 - [ ] T14 Seed pool builder tool — o4 — deps T04 T05
 - [ ] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — deps T14
