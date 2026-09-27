@@ -63,21 +63,21 @@ def category_for(r: DishResult) -> str:
 def _write_rows(ws: Worksheet, rows: list[DishResult]) -> None:
     for i, r in enumerate(rows, start=2):
         price = _price_value(r.price)
-        ws.cell(row=i, column=3, value=_clean(r.sku))
-        ws.cell(row=i, column=4, value=_clean(r.name[:200]))
-        ws.cell(row=i, column=5, value=price)
-        ws.cell(row=i, column=6, value=price)
-        ws.cell(row=i, column=7, value="FOOD_AND_GROCERY")
-        ws.cell(row=i, column=8, value=_clean(category_for(r)[:100]))
-        ws.cell(row=i, column=9, value=_clean(r.description[:2000]) if r.description else None)
-        ws.cell(row=i, column=16, value=_clean(r.hosted_url) if r.hosted_url else None)
+        ws.cell(row=i, column=3).value = _clean(r.sku)
+        ws.cell(row=i, column=4).value = _clean(r.name[:200])
+        ws.cell(row=i, column=5).value = price
+        ws.cell(row=i, column=6).value = price
+        ws.cell(row=i, column=7).value = "FOOD_AND_GROCERY"
+        ws.cell(row=i, column=8).value = _clean(category_for(r)[:100])
+        ws.cell(row=i, column=9).value = _clean(r.description[:2000]) if r.description else None
+        ws.cell(row=i, column=16).value = _clean(r.hosted_url) if r.hosted_url else None
 
 
 def _clear_rows(ws: Worksheet, count: int) -> None:
     """Reset exactly the cells a prior `_write_rows(ws, rows[:count])` touched."""
     for i in range(2, count + 2):
         for col in _TEMPLATE_COLUMNS:
-            ws.cell(row=i, column=col, value=None)
+            ws.cell(row=i, column=col).value = None
 
 
 def _set_link(cell, url: str | None) -> None:

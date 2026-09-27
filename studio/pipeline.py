@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -94,7 +95,11 @@ class Engine:
         self.http = http
         self.client = ZomatoClient(http)
         self.index = PoolIndex(store.all_items())
-        self.blocked = False
+        self.blocked_until: float = 0.0
+
+    @property
+    def blocked(self) -> bool:
+        return time.monotonic() < self.blocked_until
 
     def add_menu(self, menu: RestaurantMenu) -> int:
         n = self.store.upsert_menu(menu)
@@ -246,6 +251,9 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
 
         save_job()
         run = _Run(engine, opts, job_dir, uploader, emit, save_job, cancel, old_by_sku)
+        if engine.blocked:
+            minutes = math.ceil((engine.blocked_until - time.monotonic()) / 60)
+            run.say(f"Live search paused for {minutes} more minutes (Zomato limited this PC)")
 
         try:
             ok = run.read(menu_copy)
@@ -456,7 +464,7 @@ class _Run:
         return "", []
 
     def _blocked(self) -> None:
-        self.engine.blocked = True
+        self.engine.blocked_until = time.monotonic() + 1800
         self.warnings.append(BLOCKED_MESSAGE)
         log.warning(BLOCKED_MESSAGE)
         self.emit({"type": "log", "message": BLOCKED_MESSAGE})

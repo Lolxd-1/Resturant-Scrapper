@@ -110,6 +110,26 @@ def test_tc3_needs_price_with_photo(tmp_path):
     assert ready_ws["C2"].value is None
 
 
+# ---- TC1b: PENDING never inherits READY's values (openpyxl.cell(value=None) does not clear) ----
+
+def test_tc1b_pending_does_not_inherit_ready_values(tmp_path):
+    template = make_template(tmp_path / "template.xlsx")
+    results = [
+        mk(1, "SKU-A", "DishA", status="ready", hosted_url="https://i.ibb.co/a.jpg", price=100),
+        mk(2, "SKU-B", "DishB", status="needs_photo", price=50, description=""),
+    ]
+    paths = build_outputs(results, template, tmp_path / "out", vendor="Acme")
+
+    ready_ws = openpyxl.load_workbook(paths["ready"])["bulk_upload_template"]
+    assert ready_ws["D2"].value == "DishA"
+    assert ready_ws["C3"].value is None
+
+    pending_ws = openpyxl.load_workbook(paths["pending"])["bulk_upload_template"]
+    assert pending_ws["D2"].value == "DishB"
+    assert pending_ws["P2"].value is None  # no hosted_url; must not show DishA's photo
+    assert pending_ws["I2"].value is None  # no description; must not show DishA's row leftovers
+
+
 # ---- TC4: field length limits ----
 
 def test_tc4_limits(tmp_path):

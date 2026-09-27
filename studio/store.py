@@ -113,7 +113,15 @@ class PoolStore:
 
     def items_for_restaurant(self, res_url: str) -> list[PoolItem]:
         canonical = canonical_res_url(res_url)
-        return [it for it in self.all_items() if it.res_url == canonical]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT i.item_id, i.name, i.category, i.menu_name, i.description, i.diet, i.img_url, "
+                "r.res_id, r.name, r.res_url, r.city, r.chain_key "
+                "FROM items i JOIN restaurants r ON r.res_url = i.res_url "
+                "WHERE i.res_url = ?",
+                (canonical,),
+            ).fetchall()
+        return [PoolItem(*row) for row in rows]
 
     def count_items(self) -> int:
         with self._lock:

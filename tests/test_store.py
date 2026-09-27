@@ -4,6 +4,7 @@ from __future__ import annotations
 import gzip
 import json
 import threading
+import time
 
 import numpy as np
 import pytest
@@ -203,6 +204,50 @@ def test_tc8_thread_safety(tmp_path):
 
     assert errors == []
     assert store.count_restaurants() == 100
+    store.close()
+
+
+# ---- TC10: items_for_restaurant scales with the restaurant's own items, not the whole pool ----
+
+def test_tc10_items_for_restaurant_is_scoped_not_a_full_scan(tmp_path, monkeypatch):
+    store = PoolStore(tmp_path / "pool.db")
+    res_rows = []
+    item_rows = []
+    for r in range(200):
+        url = f"https://www.zomato.com/pune/res-{r}"
+        res_rows.append((url, str(r), f"Res {r}", "pune", "", f"res {r}", 0.0, "seed"))
+        for i in range(100):
+            item_rows.append((url, f"Item {i}", "Mains", "Menu", "", "veg", f"https://b.zmtcdn.com/{r}-{i}.jpg"))
+    with store._conn:
+        store._conn.executemany(
+            "INSERT INTO restaurants (res_url, res_id, name, city, cuisines, chain_key, fetched_at, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            res_rows,
+        )
+        store._conn.executemany(
+            "INSERT INTO items (res_url, name, category, menu_name, description, diet, img_url) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            item_rows,
+        )
+    assert store.count_items() == 20_000
+
+    target_url = "https://www.zomato.com/pune/res-199"
+    item = make_item("New Dish", "Mains", "Menu", "", "veg", "https://b.zmtcdn.com/new.jpg",
+                      "199", "Res 199", target_url, "pune")
+    store.upsert_menu(make_menu("199", "Res 199", target_url, items=[item]))
+
+    def boom():
+        raise AssertionError("items_for_restaurant must not call all_items()")
+
+    monkeypatch.setattr(store, "all_items", boom)
+
+    t0 = time.perf_counter()
+    items = store.items_for_restaurant(target_url)
+    elapsed = time.perf_counter() - t0
+
+    assert len(items) == 1
+    assert items[0].name == "New Dish"
+    assert elapsed < 0.05
     store.close()
 
 

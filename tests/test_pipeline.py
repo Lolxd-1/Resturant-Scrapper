@@ -251,6 +251,32 @@ def test_blocked_continues(tmp_path):
     assert any(e["type"] == "log" and "limiting requests" in e["message"] for e in env.events)
 
 
+# ---- TC5b: a block from one job does not disable live search forever ----
+
+def test_blocked_expires_after_window(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    env.session.add("https://www.zomato.com", *([FakeResponse(403, "forbidden")] * 5), FakeResponse(404, "not found"))
+    engine = env.engine()
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299]])
+    opts = JobOptions(vendor="Some Cafe", city="pune")
+
+    env.run(menu, opts, engine=engine, upload=False)
+    assert engine.blocked
+    blocked_until = engine.blocked_until
+
+    before = len(env.session.calls)
+    env.run(menu, opts, job="job2", engine=engine, upload=False)
+    assert not any(url.endswith("/order") for url, _ in env.session.calls[before:])
+    assert any(e["type"] == "log" and "Live search paused" in e["message"] for e in env.events)
+    assert engine.blocked_until == blocked_until  # not re-armed just by staying blocked
+
+    monkeypatch.setattr(pipeline.time, "monotonic", lambda: blocked_until + 1)
+    assert not engine.blocked
+    job3_events: list[dict] = []
+    env.run(menu, opts, job="job3", engine=engine, on_event=job3_events.append, upload=False)
+    assert any(e["type"] == "stage" and e["stage"] == "search" for e in job3_events)
+
+
 # ---- TC6: text-only mode when the vision model is unavailable ----
 
 def test_text_only_mode(tmp_path):
