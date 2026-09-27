@@ -215,7 +215,16 @@ def test_tc7_report_contents(tmp_path):
     assert summary_vals["Need price"] == 1
     assert summary_vals["Errors"] == 1
     assert summary_vals["Visual check"] == "On"
+    assert summary_vals["Logo check"] == "On"
 
+
+def test_fix3_summary_shows_logo_check_unavailable(tmp_path):
+    template = make_template(tmp_path / "template.xlsx")
+    paths = build_outputs([mk(1, "SKU-001", "Dish1")], template, tmp_path / "out", vendor="Acme", logo_on=False)
+
+    summary = openpyxl.load_workbook(paths["report"])["Summary"]
+    summary_vals = {row[0].value: row[1].value for row in summary.iter_rows(min_row=1, max_row=summary.max_row)}
+    assert summary_vals["Logo check"] == "Unavailable"
 
 # ---- TC8: performance against the real template ----
 

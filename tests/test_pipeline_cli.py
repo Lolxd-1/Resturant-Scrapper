@@ -10,7 +10,7 @@ import pytest
 from studio import imaging, pipeline
 from studio.pipeline import JobOptions, choose_alternate
 from studio.sheets import safe_vendor
-from tests.test_pipeline import Env, sheet
+from tests.test_pipeline import Env, branded_jpeg, sheet
 from tests.test_sheets import make_template
 from zomato_scrapper import main
 
@@ -57,6 +57,17 @@ def test_choose_alternate_swaps_photo_and_rebuilds(tmp_path):
     assert ready_path.stat().st_mtime > old_time
     ws = sheet(env, "Test Cafe", "UPLOAD_READY")
     assert ws["P2"].value == result.hosted_url
+
+
+def test_fix3_tc6_choose_alternate_rejects_branded_photo(tmp_path, monkeypatch):
+    env, engine = _seeded_env(tmp_path)
+    before = env.results()["Cheese Pizza"]
+    monkeypatch.setattr(imaging, "fetch_full", lambda url, http: (branded_jpeg("ZOMATO"), (420, 420)))
+
+    with pytest.raises(ValueError, match="That photo shows zomato branding — pick another"):
+        choose_alternate(engine, tmp_path / "job1", before["sku"], 0, env.uploader)
+
+    assert env.results()["Cheese Pizza"]["zomato_img"] == before["zomato_img"]
 
 
 # ---- TC2: marking a dish as needing an owner photo ----

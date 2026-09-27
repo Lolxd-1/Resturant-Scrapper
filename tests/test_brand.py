@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from studio.brand import ALWAYS_BLOCKED, BrandGuard, brand_words_from_pool
 
 
@@ -23,3 +25,17 @@ def test_ocr_unavailable_returns_empty():
     guard._engine = False  # simulate import failure without touching the real engine
     assert guard.text_in(b"x") == []
     assert guard.brands_in(b"x") == set()
+
+
+def test_fix3_guard_reports_unavailable_when_ocr_cannot_import(monkeypatch):
+    monkeypatch.setitem(sys.modules, "rapidocr", None)
+
+    guard = BrandGuard([])
+
+    assert guard.available is False
+    assert "rapidocr" in guard.reason
+
+
+def test_fix3_guard_with_scripted_ocr_is_available():
+    guard = BrandGuard([], ocr=lambda jpeg: [])
+    assert guard.available is True and guard.reason == ""

@@ -20,7 +20,7 @@ import numpy as np
 from rapidfuzz import fuzz
 
 from studio import imaging, sheets
-from studio.brand import BrandGuard, brand_words_from_pool
+from studio.brand import GENERIC, BrandGuard, brand_words_from_pool
 from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, atomic_write_text, models_dir, pool_db_path
 from studio.hosting import UploadError, Uploader
 from studio.lexicon import HEAD_CUISINES, HEAD_GROUP
@@ -281,6 +281,11 @@ def _chain_sizes(items: list[PoolItem]) -> Counter:
     return Counter(ck for _, ck in {(it.res_url, it.chain_key) for it in items})
 
 
+def _brand_guard(sizes: Counter, vendor: str) -> BrandGuard:
+    vendor_tokens = brand_words_from_pool({chain_key(vendor): 1}, min_outlets=0)
+    return BrandGuard(brand_words_from_pool(sizes) - vendor_tokens)
+
+
 def _query_text(name: str) -> str:
     return size_base_key(_PAREN_RE.sub(" ", name))
 
@@ -428,6 +433,8 @@ class _Run:
         self.live_urls: set[str] = set()
         self.used_images: dict[str, str] = {}
         self.vendor_key = chain_key(opts.vendor)
+        self.brand_guard: BrandGuard | None = None
+        self.big_chains: set[str] = set()
 
     # ---- helpers ----
 
@@ -475,7 +482,8 @@ class _Run:
 
     def build(self) -> dict[str, Path]:
         return sheets.build_outputs(self.results, TEMPLATE_PATH, self.job_dir, self.opts.vendor,
-                                    vision_on=self.engine.vision.available)
+                                    vision_on=self.engine.vision.available,
+                                    logo_on=self.brand_guard is None or self.brand_guard.available)
 
     def summary(self, files: dict[str, Path]) -> dict:
         return _summarize(self.results, files, vision=self.engine.vision.available,
@@ -520,7 +528,8 @@ class _Run:
                 kind, urls = "", []
                 own_items = [it for it in engine.store.all_items() if it.chain_key == self.vendor_key]
                 outlets = {it.res_url: it.res_name for it in own_items}
-                if len(outlets) >= 3:
+                # Same-name places with an all-generic name ("Spice Kitchen") are usually unrelated.
+                if len(outlets) >= 3 and any(t not in GENERIC for t in self.vendor_key.split()):
                     kind, items, names = "chain", own_items, list(outlets.values())
                 else:
                     kind, urls = self._find_vendor()
@@ -542,11 +551,13 @@ class _Run:
         self.say(f"Vendor found on Zomato as {kind}: {names[0]} ({len(names)} outlets)")
         # Other outlets of the same brand already in the pool carry products the fetched ones lack.
         brands = {chain_key(n) for n in names}
+        own_urls = {it.res_url for it in items} if kind == "own" else set()
         outlets: dict[str, dict[int, PoolItem]] = {}
         for it in items + [it for it in engine.store.all_items() if it.chain_key in brands]:
             outlets.setdefault(it.res_url, {})[it.item_id] = it
-        top = sorted(outlets.values(), key=len, reverse=True)[:MAX_SOURCE_OUTLETS]
-        items = [it for menu in top for it in menu.values()]
+        top = sorted(outlets.items(), key=lambda kv: (kv[0] in own_urls, len(kv[1])), reverse=True)
+        top = top[:MAX_SOURCE_OUTLETS]
+        items = [it for _, menu in top for it in menu.values()]
         self.say(f"Using {len(top)} outlets of {names[0]}")
         for g in self.groups:
             self.check()
@@ -785,9 +796,9 @@ class _Run:
 
     def photos(self) -> None:
         self.stage("photos")
-        counts = _chain_sizes(self.engine.store.all_items())
-        vendor_tokens = brand_words_from_pool({self.vendor_key: 1}, min_outlets=0)
-        self.brand_guard = BrandGuard(brand_words_from_pool(counts) - vendor_tokens)
+        sizes = _chain_sizes(self.engine.store.all_items())
+        self.brand_guard = _brand_guard(sizes, self.opts.vendor)
+        self.big_chains = {k for k, n in sizes.items() if n >= 5 and k != self.vendor_key}
         (self.job_dir / "images").mkdir(exist_ok=True)
         for i, g in enumerate(self.groups):
             self.check()
@@ -799,6 +810,10 @@ class _Run:
             self.emit_rows([r for r in g.rows
                             if not (self.opts.upload and r.local_image and not r.hosted_url)])
             self.stage("photos", (i + 1) / len(self.groups))
+        if not self.brand_guard.available:
+            message = f"Logo check unavailable: {self.brand_guard.reason}"
+            self.warnings.append(message)
+            self.say(message)
 
     def _photo_group(self, g: _Group) -> None:
         old = [self.old_by_sku.get(r.sku) for r in g.rows]
@@ -813,7 +828,7 @@ class _Run:
                     "restaurant_url": first.restaurant_url, "zomato_img": first.zomato_img,
                     "tier": first.tier, "confidence": first.confidence, "source": first.source}] \
             + first.alternates
-        branded = ""
+        branded = big_chain = ""
         for opt in options:
             is_fallback = opt is not options[0]
             if is_fallback and self.used_images.get(opt["zomato_img"], g.key) != g.key:
@@ -829,6 +844,11 @@ class _Run:
                 branded = sorted(hit)[0]
                 self.say(f"Skipped a photo showing {branded} for {first.name}")
                 continue
+            # Without OCR, a big chain's photo may carry its logo box, as in text-only mode.
+            if (not self.brand_guard.available and opt["source"] not in ("own", "chain")
+                    and chain_key(opt["restaurant"]) in self.big_chains):
+                big_chain = opt["restaurant"]
+                continue
             for r in g.rows:
                 if is_fallback:
                     _apply_pick(r, opt)
@@ -840,8 +860,13 @@ class _Run:
                 self.used_images[opt["zomato_img"]] = g.key
             return
         for r in g.rows:
-            r.reason = (f"Only photos with {branded} branding found — ask the owner for a photo"
-                        if branded else "Photo download failed")
+            if branded:
+                r.reason = f"Only photos with {branded} branding found — ask the owner for a photo"
+            elif big_chain:
+                r.reason = (f"Only photos from {big_chain} found and the logo check is unavailable"
+                            " — ask the owner for a photo")
+            else:
+                r.reason = "Photo download failed"
 
     def upload(self) -> None:
         if not self.opts.upload:
@@ -886,7 +911,9 @@ def rebuild_outputs(engine_or_none: Engine | None, job_dir: Path) -> dict:
     prev_summary = job.get("summary") or {}
     vision_on = engine_or_none.vision.available if engine_or_none is not None \
         else bool(prev_summary.get("vision", True))
-    files = sheets.build_outputs(results, TEMPLATE_PATH, job_dir, job["vendor"], vision_on=vision_on)
+    logo_on = not any(w.startswith("Logo check unavailable") for w in prev_summary.get("warnings", []))
+    files = sheets.build_outputs(results, TEMPLATE_PATH, job_dir, job["vendor"], vision_on=vision_on,
+                                 logo_on=logo_on)
     summary = _summarize(results, files, vision=vision_on,
                          duration_s=prev_summary.get("duration_s", 0.0),
                          warnings=prev_summary.get("warnings", []))
@@ -928,6 +955,9 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
             if got is None:
                 raise ValueError("That photo could not be downloaded")
             jpeg, (w, h) = got
+            brands = _brand_guard(_chain_sizes(engine.store.all_items()), job["vendor"]).brands_in(jpeg)
+            if brands:
+                raise ValueError(f"That photo shows {sorted(brands)[0]} branding — pick another")
             old_pick = _pick_dict(r) if r.zomato_img else None
             alternates = list(r.alternates)
             if old_pick is not None:

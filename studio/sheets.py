@@ -87,7 +87,8 @@ def _set_link(cell, url: str | None) -> None:
         cell.hyperlink = url
 
 
-def _write_summary(ws: Worksheet, results: list[DishResult], vendor: str, vision_on: bool) -> None:
+def _write_summary(ws: Worksheet, results: list[DishResult], vendor: str, vision_on: bool,
+                   logo_on: bool) -> None:
     total = len(results)
     ready_n = sum(1 for r in results if r.status == "ready")
     needs_photo_n = sum(1 for r in results if r.status == "needs_photo")
@@ -106,6 +107,7 @@ def _write_summary(ws: Worksheet, results: list[DishResult], vendor: str, vision
         ("Errors", error_n),
         ("Photo coverage", f"{coverage}%"),
         ("Visual check", "On" if vision_on else "Unavailable"),
+        ("Logo check", "On" if logo_on else "Unavailable"),
     ]
     for label, value in rows:
         ws.append([label, value])
@@ -156,11 +158,11 @@ def _write_checklist(ws: Worksheet, results: list[DishResult]) -> None:
     ws.column_dimensions["E"].width = 60
 
 
-def _build_report(path: Path, results: list[DishResult], vendor: str, vision_on: bool) -> None:
+def _build_report(path: Path, results: list[DishResult], vendor: str, vision_on: bool, logo_on: bool) -> None:
     wb = openpyxl.Workbook()
     summary_ws = wb.active
     summary_ws.title = "Summary"
-    _write_summary(summary_ws, results, vendor, vision_on)
+    _write_summary(summary_ws, results, vendor, vision_on, logo_on)
     _write_dishes(wb.create_sheet("Dishes"), results)
     _write_checklist(wb.create_sheet("Owner photo checklist"), results)
     wb.save(path)
@@ -168,7 +170,8 @@ def _build_report(path: Path, results: list[DishResult], vendor: str, vision_on:
 
 
 def build_outputs(
-    results: list[DishResult], template: Path, out_dir: Path, vendor: str, *, vision_on: bool = True
+    results: list[DishResult], template: Path, out_dir: Path, vendor: str, *, vision_on: bool = True,
+    logo_on: bool = True
 ) -> dict[str, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -190,6 +193,6 @@ def build_outputs(
     wb.save(pending_path)
     wb.close()
 
-    _build_report(report_path, ordered, vendor, vision_on)
+    _build_report(report_path, ordered, vendor, vision_on, logo_on)
 
     return {"ready": ready_path, "pending": pending_path, "report": report_path}

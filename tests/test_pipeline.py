@@ -740,6 +740,56 @@ def test_tune3_tc6_ocr_import_failure_disables_guard(tmp_path, monkeypatch):
     assert res["status"] == "ready" and res["zomato_img"]
 
 
+def test_fix3_tc3_logo_check_unavailable_drops_big_chain_photos(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "rapidocr", None)
+    env = Env(tmp_path)
+    env.pool("wowza-0", [("Cheese Pizza", "Pizza", "veg", "cheese-wowza")], res_name="Wowza Pizza")
+    for i in range(1, 5):
+        env.pool(f"wowza-{i}", [("Other Dish", "Pizza", "veg", f"wowza-filler-{i}")], res_name="Wowza Pizza")
+    env.pool("corner-cafe", [("Cold Coffee", "Drinks", "veg", "cc-corner")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199], ["Cold Coffee", "Beverages", "", 99]])
+
+    summary = env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    assert any(w.startswith("Logo check unavailable") for w in summary["warnings"])
+    res = env.results()
+    assert res["Cheese Pizza"]["status"] == "needs_photo" and res["Cheese Pizza"]["local_image"] == ""
+    assert res["Cheese Pizza"]["reason"] == ("Only photos from Wowza Pizza found and the logo check is unavailable"
+                                             " — ask the owner for a photo")
+    assert res["Cold Coffee"]["status"] == "ready"
+    report = openpyxl.load_workbook(env.tmp / "job1" / f"{safe_vendor('Test Cafe')}_Photo_Report.xlsx")["Summary"]
+    assert {row[0].value: row[1].value for row in report.iter_rows()}["Logo check"] == "Unavailable"
+
+
+def test_fix3_tc5_generic_same_name_pool_restaurants_are_not_a_chain(tmp_path):
+    env = Env(tmp_path)
+    for i in range(3):
+        env.pool(f"spice-kitchen-{i}", [("Paneer Tikka", "Starters", "veg", f"pt-{i}")], res_name="Spice Kitchen")
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    menu = env.menu([["Paneer Tikka", "Starters", "", 199]])
+
+    env.run(menu, JobOptions(vendor="Spice Kitchen", live_search=False), upload=False)
+
+    assert env.results()["Paneer Tikka"]["source"] != "chain"
+    assert any(e.get("message") == "Vendor not found on Zomato; using photos from other restaurants"
+               for e in env.events)
+
+
+def test_fix3_own_url_menu_always_in_source_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "MAX_SOURCE_OUTLETS", 1)
+    env = Env(tmp_path)
+    env.pool("my-cafe-kothrud", [("Garden Special", "Pizza", "veg", "garden-other"),
+                                 ("Cold Coffee", "Drinks", "veg", "cc-other")], res_name="My Cafe")
+    env.page("my-cafe", [("Garden Special", "Pizza", "veg", "garden-own")], res_name="My Cafe")
+    menu = env.menu([["Garden Special", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="My Cafe", zomato_url="https://www.zomato.com/pune/my-cafe/order",
+                             live_search=False), upload=False)
+
+    r = env.results()["Garden Special"]
+    assert r["source"] == "own" and r["zomato_img"] == IMG + "garden-own.jpg"
+
+
 def test_uifix_tc2_low_disk_fails_before_any_work(tmp_path, monkeypatch):
     class FakeUsage:
         free = 0.2 * 1_000_000_000

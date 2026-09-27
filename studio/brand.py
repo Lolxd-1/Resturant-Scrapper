@@ -1,6 +1,7 @@
 """Brand guard: local OCR catches Zomato/Swiggy props and other chains' branding in photos."""
 from __future__ import annotations
 
+import importlib
 import logging
 import re
 import threading
@@ -56,8 +57,17 @@ class BrandGuard:
         self._engine = None
         self._lock = threading.Lock()
         self._logged_disabled = False
+        self.available, self.reason = True, ""
+        if ocr is None:
+            # RapidOCR loads onnxruntime (and its VC++ runtime DLLs) only on first use, so probe both now.
+            try:
+                for module in ("rapidocr", "onnxruntime"):
+                    importlib.import_module(module)
+            except Exception as exc:
+                self.available, self.reason = False, str(exc) or type(exc).__name__
 
     def _disable(self, reason: str) -> None:
+        self.available, self.reason = False, reason
         if not self._logged_disabled:
             log.warning("brand guard disabled: %s", reason)
             self._logged_disabled = True
