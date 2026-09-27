@@ -21,3 +21,4 @@
 - 2026-09-27T08:29:21Z T03 PASS (concern: diet precedence -> forwarded to T06 Notes). dispatch T06 (opus)
 - 2026-09-27T08:49:24Z T06 review CHANGES_REQUIRED (1 critical combo, 2 important) + orchestrator live-pool findings; fix round 1 -> resume T06 executor
 - 2026-09-27T08:55:16Z T06 PASS (round 1). Accepted concerns: CURRY_LIKE {CURRY,masala} counts as one match; 'kala' soft instead of KALAMASALA phrase. DATA1 committed 85fc73d. dispatch T07 (sonnet); T06 rereview in background pinned to e56b05d..3b6d625
+- 2026-09-27T09:04:59Z T06 rereview APPROVE. T07 PASS (CURRY->DAL in TC5). dispatch T08 (sonnet)

@@ -22,8 +22,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T02 Menu reader — o5 — done 2c0ac0e..1f40f76 (gate PASS)
 - [x] T03 Lexicon + text — o6 — done 0e9016a..d9e5c07 (gate PASS)
 - [x] T06 Matcher + golden set — o7 — done 4f1bb4f..3b6d625 (gate PASS after round 1; scope hit = DATA1 commit)
-- [~] T07 Imaging + vision — o8 — attempt=1
-- [ ] T08 ImgBB uploader — o9 — deps T05
+- [x] T07 Imaging + vision — o8 — done 69d04b5..9e9ffb7 (gate PASS)
+- [~] T08 ImgBB uploader — o9 — attempt=1
 - [ ] T09 Sheets builder — o10 — deps T01
 - [ ] T10 Pipeline engine — o11 — deps T02-T09
 - [ ] T10B Photo swap + CLI — o12 — deps T10
