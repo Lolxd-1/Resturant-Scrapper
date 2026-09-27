@@ -38,3 +38,4 @@
 - 2026-09-27T12:47:20Z Ruling: T13 Verify line 2 was a plan defect (bash expanded $e/$_ inside double quotes); single-quoted it. Fresh-PC sim: uv + Python 3.12 + 49 pkgs + SELF-TEST OK.
 - 2026-09-27T12:47:52Z T13 PASS. dispatch T15 (sonnet); orchestrator re-evaluates 6 menus in parallel (read-only)
 - 2026-09-27T12:52:22Z T15 PASS. All build tasks done; EVAL re-run in progress.
+- 2026-09-27T14:54:52Z Final review (opus) CHANGES_REQUIRED: 2 critical (swap races), 8 important, 11 minor. Ruling: split the single fix wave into FIX1/FIX2/FIX3 — executors repeatedly hit the 60-turn cap on large briefs — cost if wrong: 2 extra dispatches. Re-eval 305/330 (92.4%). dispatch FIX1 (opus)
