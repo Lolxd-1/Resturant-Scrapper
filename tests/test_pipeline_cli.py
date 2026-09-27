@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import os
+import threading
+import time
 
 import pytest
 
-from studio import pipeline
+from studio import imaging, pipeline
 from studio.pipeline import JobOptions, choose_alternate
 from studio.sheets import safe_vendor
 from tests.test_pipeline import Env, sheet
@@ -87,6 +89,45 @@ def test_choose_alternate_errors(tmp_path):
 
     with pytest.raises(ValueError):
         choose_alternate(engine, job_dir, sku, 99, env.uploader)
+
+
+# ---- FIX1 TC1: concurrent swaps on one job keep both edits ----
+
+def test_fix1_tc1_concurrent_swaps_keep_both_edits(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Veg Burger", "Burgers", "veg", "burger1")])
+    env.pool("cafe-two", [("Cheese Pizza", "Pizza", "veg", "cheese2"), ("Veg Burger", "Burgers", "veg", "burger2")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199], ["Veg Burger", "Burgers", "", 149]])
+    engine = env.engine()
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), engine=engine)
+    job_dir = tmp_path / "job1"
+    pizza, burger = env.results()["Cheese Pizza"], env.results()["Veg Burger"]
+    assert pizza["alternates"] and burger["zomato_img"], "test setup should give both dishes photos"
+    alt_img = pizza["alternates"][0]["zomato_img"]
+
+    real_fetch = imaging.fetch_full
+    first_fetching = threading.Event()
+
+    def slow_fetch(url, http):
+        first_fetching.set()
+        time.sleep(0.3)
+        return real_fetch(url, http)
+
+    monkeypatch.setattr(imaging, "fetch_full", slow_fetch)
+    swap = threading.Thread(target=choose_alternate,
+                            args=(engine, job_dir, pizza["sku"], 0, env.uploader), kwargs={"rebuild": False})
+    swap.start()
+    assert first_fetching.wait(5)
+    mark = threading.Thread(target=choose_alternate,
+                            args=(engine, job_dir, burger["sku"], None, env.uploader), kwargs={"rebuild": False})
+    mark.start()
+    swap.join(10)
+    mark.join(10)
+
+    after = env.results()
+    assert after["Cheese Pizza"]["zomato_img"] == alt_img
+    assert after["Veg Burger"]["status"] == "needs_photo"
+    assert after["Veg Burger"]["zomato_img"] == ""
 
 
 # ---- TC4: CLI, no upload ----

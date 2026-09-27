@@ -32,6 +32,7 @@ from studio.pipeline import (
     JobOptions,
     build_engine,
     choose_alternate,
+    job_lock,
     list_jobs,
     new_job_id,
     rebuild_outputs,
@@ -120,6 +121,10 @@ class Worker:
         self._rebuild_events: dict[str, threading.Event] = {}
         self._rebuild_lock = threading.Lock()
         self._rebuild_queued: set[str] = set()
+        # gen counts swaps per job; built is the newest generation a finished rebuild captured.
+        self._gen: dict[str, int] = {}
+        self._built: dict[str, int] = {}
+        self._build_lock = threading.Lock()
 
     def set_status(self, status: str) -> None:
         self.status = status
@@ -141,9 +146,10 @@ class Worker:
             ev.set()
 
     def request_rebuild(self, job_id: str) -> None:
-        ev = self._rebuild_events.setdefault(job_id, threading.Event())
-        ev.clear()
+        """Record one more swap for job_id and queue a rebuild (coalesced)."""
         with self._rebuild_lock:
+            self._gen[job_id] = self._gen.get(job_id, 0) + 1
+            self._rebuild_events.setdefault(job_id, threading.Event()).clear()
             if job_id not in self._rebuild_queued:
                 self._rebuild_queued.add(job_id)
                 self._queue.put(("rebuild", job_id))
@@ -156,13 +162,11 @@ class Worker:
             stale = False
         if not stale:
             return
-        ev = self._rebuild_events.get(job_id)
-        if ev is None:
-            if self.engine is not None:
-                try:
-                    rebuild_outputs(self.engine, self.output_dir / job_id)
-                except Exception:
-                    log.exception("sync rebuild failed for %s", job_id)
+        with self._rebuild_lock:
+            ev = self._rebuild_events.get(job_id)
+        if ev is None or ev.is_set():
+            # Nothing pending: stale from an earlier session or a failed rebuild, so try again now.
+            self._rebuild(job_id)
             return
         ev.wait(timeout)
 
@@ -221,13 +225,45 @@ class Worker:
     def _rebuild(self, job_id: str) -> None:
         with self._rebuild_lock:
             self._rebuild_queued.discard(job_id)
+            gen = self._gen.get(job_id, 0)
+        job_dir = self.output_dir / job_id
         try:
-            if self.engine is not None:
-                rebuild_outputs(self.engine, self.output_dir / job_id)
-        except Exception:
+            with self._build_lock:
+                if self.engine is not None:
+                    rebuild_outputs(self.engine, job_dir)
+                    with job_lock(job_dir):
+                        job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+                        if self._gen.get(job_id, 0) == gen:
+                            job["sheets_stale"] = False
+                            _write_json(job_dir / "job.json", job)
+        except Exception as exc:
             log.exception("rebuild failed for %s", job_id)
+            if isinstance(exc, PermissionError):
+                name = Path(exc.filename).name if exc.filename else "the sheet"
+                message = f"Close the Excel file ({name}) and try again."
+            else:
+                message = f"Could not update the sheets: {exc}"[:300]
+            try:
+                with job_lock(job_dir):
+                    job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+                    job["rebuild_error"] = message
+                    _write_json(job_dir / "job.json", job)
+            except (OSError, ValueError):
+                log.exception("could not record rebuild error for %s", job_id)
         finally:
-            self._rebuild_events.setdefault(job_id, threading.Event()).set()
+            with self._rebuild_lock:
+                self._built[job_id] = max(self._built.get(job_id, 0), gen)
+                ev = self._rebuild_events.setdefault(job_id, threading.Event())
+                if self._built[job_id] >= self._gen.get(job_id, 0):
+                    ev.set()
+
+
+def _require_fresh_sheets(job: dict) -> None:
+    """Refuse to serve sheets that miss the user's latest photo changes."""
+    if job.get("rebuild_error"):
+        raise HTTPException(409, job["rebuild_error"])
+    if job.get("sheets_stale"):
+        raise HTTPException(409, "The sheets are still being updated with your photo changes. Try again in a moment.")
 
 
 def _make_default_factory(config_path: Path, set_status: Callable[[str], None]) -> Callable[[], Engine]:
@@ -476,17 +512,22 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
             raise HTTPException(404)
         if worker.engine is None:
             raise HTTPException(503, "Engine not ready")
+        if worker.is_active(id):
+            raise HTTPException(409, "This job is still running — wait until it finishes, then change photos.")
         alt_index = body.get("alt_index")
         settings = load_settings(config_path)
         uploader = (
             Uploader(settings.imgbb_keys, store=worker.engine.store)
             if any(k.key for k in settings.imgbb_keys) else None
         )
-        try:
-            result = choose_alternate(worker.engine, job_dir, sku, alt_index, uploader, rebuild=False)
-        except ValueError as exc:
-            raise HTTPException(400, str(exc))
-        worker.request_rebuild(id)
+        # Holding the job lock until the swap is counted stops an in-flight rebuild from
+        # clearing sheets_stale between this swap's write and request_rebuild.
+        with job_lock(job_dir):
+            try:
+                result = choose_alternate(worker.engine, job_dir, sku, alt_index, uploader, rebuild=False)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
+            worker.request_rebuild(id)
         return dish_result_to_dict(result)
 
     @app.get("/api/jobs/{id}/files/{kind}")
@@ -496,6 +537,7 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
             raise HTTPException(404)
         worker.wait_rebuild(id)
         job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+        _require_fresh_sheets(job)
         name = ((job.get("summary") or {}).get("files") or {}).get(kind)
         if not name:
             raise HTTPException(404)
@@ -520,6 +562,7 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
         job_dir = _existing_job_dir(id)
         worker.wait_rebuild(id)
         job = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+        _require_fresh_sheets(job)
         files = (job.get("summary") or {}).get("files") or {}
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

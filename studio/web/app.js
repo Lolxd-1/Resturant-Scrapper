@@ -144,6 +144,34 @@ async function api(method, path, body) {
   return data;
 }
 
+// Downloads go through fetch so a refused download (e.g. the sheet is open in Excel) shows its reason
+// as a toast instead of saving an error page as the file.
+async function download(e) {
+  e.preventDefault();
+  const link = e.currentTarget;
+  let res;
+  try {
+    res = await fetch(link.href);
+  } catch {
+    toastError(new Error("Menu Studio is not responding. Is the app still running?"));
+    return;
+  }
+  if (!res.ok) {
+    let detail = null;
+    try { detail = (await res.json()).detail; } catch { detail = null; }
+    toastError(new Error(typeof detail === "string" ? detail : `Download failed (${res.status})`));
+    return;
+  }
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = /filename\*=utf-8''([^;]+)/i.exec(disposition) || /filename="([^"]+)"/i.exec(disposition);
+  const url = URL.createObjectURL(await res.blob());
+  const a = h("a", { href: url, download: match ? decodeURIComponent(match[1]) : "" });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // ---------- toasts ----------
 
 function toast(message, kind = "ok") {
@@ -665,10 +693,10 @@ function jobView(view, id) {
     val.style.strokeDashoffset = String(circ * (1 - pct / 100));
     const files = job.summary.files || {};
     const dl = [];
-    if (files.ready) dl.push(h("a", { class: "btn primary", href: `${base}/files/ready`, download: "" }, icon("download"), "Upload-ready sheet"));
-    if (files.pending) dl.push(h("a", { class: "btn", href: `${base}/files/pending`, download: "" }, "Pending sheet"));
-    if (files.report) dl.push(h("a", { class: "btn", href: `${base}/files/report`, download: "" }, "Report"));
-    if (dl.length) dl.push(h("a", { class: "btn", href: `${base}/zip`, download: "" }, "Everything (.zip)"));
+    if (files.ready) dl.push(h("a", { class: "btn primary", href: `${base}/files/ready`, download: "", onclick: download }, icon("download"), "Upload-ready sheet"));
+    if (files.pending) dl.push(h("a", { class: "btn", href: `${base}/files/pending`, download: "", onclick: download }, "Pending sheet"));
+    if (files.report) dl.push(h("a", { class: "btn", href: `${base}/files/report`, download: "", onclick: download }, "Report"));
+    if (dl.length) dl.push(h("a", { class: "btn", href: `${base}/zip`, download: "", onclick: download }, "Everything (.zip)"));
     hero.append(h("section", { class: "card", "aria-label": "Summary" },
       h("div", { class: "hero" },
         h("div", { class: "ring", role: "img", "aria-label": `${pct}% of dishes have a photo` }, ring, h("span", null, `${pct}%`)),

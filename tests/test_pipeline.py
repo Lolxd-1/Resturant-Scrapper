@@ -647,3 +647,33 @@ def test_uifix_tc2_low_disk_fails_before_any_work(tmp_path, monkeypatch):
     assert "disk is almost full" in job["error"]
     assert not (tmp_path / "job1" / "results.json").exists()
     assert not list((tmp_path / "job1").glob("*_SmartBiz_*.xlsx"))
+
+
+def test_fix1_tc5_low_disk_keeps_menu_and_resumes(tmp_path, monkeypatch):
+    class FakeUsage:
+        free = 0.2 * 1_000_000_000
+
+    real_disk_usage = pipeline.shutil.disk_usage
+    monkeypatch.setattr(pipeline.shutil, "disk_usage", lambda path: FakeUsage())
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199]])
+    opts = JobOptions(vendor="Test Cafe", live_search=False)
+
+    env.run(menu, opts, upload=False)
+
+    job = load_job(tmp_path / "job1")
+    assert job["status"] == "failed"
+    assert job["menu_file"] == "menu.xlsx"
+    assert (tmp_path / "job1" / "menu.xlsx").is_file()
+    errors = [e for e in env.events if e["type"] == "error"]
+    assert errors and "disk is almost full" in errors[0]["message"]
+    created = job["created"]
+
+    monkeypatch.setattr(pipeline.shutil, "disk_usage", real_disk_usage)
+    summary = env.run(tmp_path / "job1" / job["menu_file"], opts, upload=False)
+
+    job = load_job(tmp_path / "job1")
+    assert job["status"] == "done"
+    assert job["created"] == created
+    assert summary["total"] == 1

@@ -6,6 +6,7 @@ import json
 import time
 import zipfile
 
+import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
@@ -244,6 +245,93 @@ def test_choose_null_marks_needs_photo(tmp_path):
     r = client.post(f"/api/jobs/{job_id}/dishes/{sku}/choose", json={"alt_index": None})
     assert r.status_code == 200
     assert r.json()["status"] == "needs_photo"
+
+
+# ---- FIX1 ----
+
+def _two_ready_dishes(output_dir, job_id) -> tuple[str, str]:
+    """Rewrite the job's results as two ready dishes with hosted photos; return their SKUs."""
+    results_file = output_dir / job_id / "results.json"
+    data = json.loads(results_file.read_text(encoding="utf-8"))
+    first = data[0]
+    sku_a = first["sku"]
+    sku_b = sku_a.rsplit("-", 1)[0] + "-099"
+    first.update(status="ready", reason="", hosted_url="https://i.ibb.co/1/a.jpg", zomato_img=IMG + "cheese1.jpg")
+    second = dict(first, sku=sku_b, name="Paneer Pizza", hosted_url="https://i.ibb.co/2/b.jpg")
+    results_file.write_text(json.dumps([first, second]), encoding="utf-8")
+    return sku_a, sku_b
+
+
+def _ready_rows(content: bytes) -> list:
+    ws = openpyxl.load_workbook(io.BytesIO(content))["bulk_upload_template"]
+    return [ws[f"D{r}"].value for r in range(2, 5) if ws[f"D{r}"].value]
+
+
+def test_fix1_tc2_choose_while_job_active_is_409(tmp_path, monkeypatch):
+    app, *_ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, job = _run_simple_job(client, tmp_path)
+    monkeypatch.setattr(app.state.worker, "is_active", lambda jid: True)
+
+    r = client.post(f"/api/jobs/{job_id}/dishes/{job['results'][0]['sku']}/choose", json={"alt_index": None})
+
+    assert r.status_code == 409
+    assert r.json()["detail"] == "This job is still running — wait until it finishes, then change photos."
+
+
+def test_fix1_tc3_download_waits_for_latest_swap(tmp_path, monkeypatch):
+    app, output_dir, _ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, _job = _run_simple_job(client, tmp_path)
+    sku_a, sku_b = _two_ready_dishes(output_dir, job_id)
+    real_rebuild = server_mod.rebuild_outputs
+
+    def slow_rebuild(engine, job_dir):
+        summary = real_rebuild(engine, job_dir)
+        time.sleep(0.5)
+        return summary
+
+    monkeypatch.setattr(server_mod, "rebuild_outputs", slow_rebuild)
+
+    ra = client.post(f"/api/jobs/{job_id}/dishes/{sku_a}/choose", json={"alt_index": None})
+    rb = client.post(f"/api/jobs/{job_id}/dishes/{sku_b}/choose", json={"alt_index": None})
+    assert ra.status_code == 200 and rb.status_code == 200
+
+    r = client.get(f"/api/jobs/{job_id}/files/ready")
+
+    assert r.status_code == 200
+    assert _ready_rows(r.content) == []
+    job = json.loads((output_dir / job_id / "job.json").read_text(encoding="utf-8"))
+    assert job["sheets_stale"] is False
+
+
+def test_fix1_tc4_failed_rebuild_is_409_until_fixed(tmp_path, monkeypatch):
+    app, output_dir, _ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, _job = _run_simple_job(client, tmp_path)
+    sku_a, _sku_b = _two_ready_dishes(output_dir, job_id)
+    real_rebuild = server_mod.rebuild_outputs
+
+    def locked_rebuild(engine, job_dir):
+        raise PermissionError(13, "Permission denied", str(job_dir / "Test_Cafe_SmartBiz_UPLOAD_READY.xlsx"))
+
+    monkeypatch.setattr(server_mod, "rebuild_outputs", locked_rebuild)
+    assert client.post(f"/api/jobs/{job_id}/dishes/{sku_a}/choose", json={"alt_index": None}).status_code == 200
+
+    r = client.get(f"/api/jobs/{job_id}/files/ready")
+    assert r.status_code == 409
+    assert r.json()["detail"] == "Close the Excel file (Test_Cafe_SmartBiz_UPLOAD_READY.xlsx) and try again."
+    assert client.get(f"/api/jobs/{job_id}/zip").status_code == 409
+
+    monkeypatch.setattr(server_mod, "rebuild_outputs", real_rebuild)
+    r2 = client.get(f"/api/jobs/{job_id}/files/ready")
+    assert r2.status_code == 200
+    assert _ready_rows(r2.content) == ["Paneer Pizza"]
+    job = json.loads((output_dir / job_id / "job.json").read_text(encoding="utf-8"))
+    assert "rebuild_error" not in job and job["sheets_stale"] is False
 
 
 # ---- TC8 ----

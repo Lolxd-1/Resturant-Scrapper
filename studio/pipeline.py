@@ -175,6 +175,17 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+_job_locks: dict[Path, threading.RLock] = {}
+_job_locks_guard = threading.Lock()
+
+
+def job_lock(job_dir: Path) -> threading.RLock:
+    """Per-job lock serialising every read-modify-write of results.json/job.json."""
+    key = Path(job_dir).resolve()
+    with _job_locks_guard:
+        return _job_locks.setdefault(key, threading.RLock())
+
+
 def _write_json(path: Path, data) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -288,20 +299,6 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
     menu_path, job_dir = Path(menu_path), Path(job_dir)
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    free_gb = shutil.disk_usage(job_dir).free / 1_000_000_000
-    if free_gb < 0.5:
-        message = _DISK_FULL_MESSAGE % free_gb
-        job = {
-            "id": job_dir.name, "vendor": opts.vendor, "options": asdict(opts), "status": "failed",
-            "stage": "read", "created": _now(), "updated": _now(), "summary": None,
-            "error": message, "menu_file": None,
-        }
-        try:
-            _write_json(job_dir / "job.json", job)
-        except OSError:
-            pass
-        return _summarize([], {}, vision=engine.vision.available, duration_s=0.0, warnings=[])
-
     menu_copy = job_dir / f"menu{menu_path.suffix.lower()}"
     if menu_path.resolve() != menu_copy.resolve():
         shutil.copyfile(menu_path, menu_copy)
@@ -314,6 +311,24 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
             old_created = load_job(job_dir).get("created")
         except (OSError, ValueError):
             pass
+
+    free_gb = shutil.disk_usage(job_dir).free / 1_000_000_000
+    if free_gb < 0.5:
+        message = _DISK_FULL_MESSAGE % free_gb
+        job = {
+            "id": job_dir.name, "vendor": opts.vendor, "options": asdict(opts), "status": "failed",
+            "stage": "read", "created": old_created or _now(), "updated": _now(), "summary": None,
+            "error": message, "menu_file": menu_copy.name,
+        }
+        try:
+            with job_lock(job_dir):
+                _write_json(job_file, job)
+        except OSError:
+            pass
+        if on_event is not None:
+            on_event({"type": "error", "message": message})
+        return _summarize([], {}, vision=engine.vision.available, duration_s=0.0, warnings=[])
+
     job = {
         "id": job_dir.name, "vendor": opts.vendor, "options": asdict(opts), "status": "running",
         "stage": "read", "created": old_created or _now(), "updated": _now(), "summary": None,
@@ -342,7 +357,8 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
 
         def save_job(**changes) -> None:
             job.update(changes, updated=_now())
-            _write_json(job_file, job)
+            with job_lock(job_dir):
+                _write_json(job_file, job)
 
         save_job()
         run = _Run(engine, opts, job_dir, uploader, emit, save_job, cancel, old_by_sku)
@@ -438,7 +454,9 @@ class _Run:
         self.emit({"type": "log", "message": message})
 
     def write_results(self) -> None:
-        _write_json(self.job_dir / "results.json", [dish_result_to_dict(r) for r in self.results])
+        data = [dish_result_to_dict(r) for r in self.results]
+        with job_lock(self.job_dir):
+            _write_json(self.job_dir / "results.json", data)
 
     def fail_group(self, g: _Group, exc: Exception) -> None:
         log.warning("dish %r failed: %s", g.q.display, exc, exc_info=True)
@@ -835,10 +853,15 @@ class _Run:
 
 
 def rebuild_outputs(engine_or_none: Engine | None, job_dir: Path) -> dict:
-    """Rebuild the three output files from results.json and clear job.json's sheets_stale flag."""
+    """Rebuild the three output files from results.json and store the new summary in job.json.
+
+    Leaves job.json's sheets_stale flag alone: only the caller knows whether a newer swap happened
+    while the sheets were being built.
+    """
     job_dir = Path(job_dir)
-    job = load_job(job_dir)
-    data = json.loads((job_dir / "results.json").read_text(encoding="utf-8"))
+    with job_lock(job_dir):
+        job = load_job(job_dir)
+        data = json.loads((job_dir / "results.json").read_text(encoding="utf-8"))
     results = [dish_result_from_dict(d) for d in data]
     prev_summary = job.get("summary") or {}
     vision_on = engine_or_none.vision.available if engine_or_none is not None \
@@ -847,10 +870,12 @@ def rebuild_outputs(engine_or_none: Engine | None, job_dir: Path) -> dict:
     summary = _summarize(results, files, vision=vision_on,
                          duration_s=prev_summary.get("duration_s", 0.0),
                          warnings=prev_summary.get("warnings", []))
-    job["summary"] = summary
-    job["sheets_stale"] = False
-    job["updated"] = _now()
-    _write_json(job_dir / "job.json", job)
+    with job_lock(job_dir):
+        job = load_job(job_dir)
+        job["summary"] = summary
+        job.pop("rebuild_error", None)
+        job["updated"] = _now()
+        _write_json(job_dir / "job.json", job)
     return summary
 
 
@@ -858,59 +883,61 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
                      uploader: Uploader | None, *, rebuild: bool = True) -> DishResult:
     """Swap sku's photo to one of its stored alternates, or mark it as needing an owner photo."""
     job_dir = Path(job_dir)
-    results_file = job_dir / "results.json"
-    data = json.loads(results_file.read_text(encoding="utf-8"))
-    by_sku = {d["sku"]: i for i, d in enumerate(data)}
-    try:
-        idx = by_sku[sku]
-    except KeyError:
-        raise ValueError(f"Unknown SKU {sku}")
-    r = dish_result_from_dict(data[idx])
-    job = load_job(job_dir)
-    upload = bool(job.get("options", {}).get("upload", True))
-
-    if alt_index is None:
-        r.alternates = [_pick_dict(r), *r.alternates]
-        r.local_image, r.hosted_url, r.zomato_img = "", "", ""
-        r.status, r.reason = "needs_photo", "Marked by you: needs owner photo"
-    else:
+    with job_lock(job_dir):
+        results_file = job_dir / "results.json"
+        data = json.loads(results_file.read_text(encoding="utf-8"))
+        by_sku = {d["sku"]: i for i, d in enumerate(data)}
         try:
-            alt = r.alternates[alt_index]
-        except IndexError:
-            raise ValueError("No such alternate")
-        got = imaging.fetch_full(alt["zomato_img"], engine.http)
-        if got is None:
-            raise ValueError("That photo could not be downloaded")
-        jpeg, (w, h) = got
-        old_pick = _pick_dict(r) if r.zomato_img else None
-        alternates = list(r.alternates)
-        if old_pick is not None:
-            alternates[alt_index] = old_pick
+            idx = by_sku[sku]
+        except KeyError:
+            raise ValueError(f"Unknown SKU {sku}")
+        r = dish_result_from_dict(data[idx])
+        job = load_job(job_dir)
+        upload = bool(job.get("options", {}).get("upload", True))
+
+        if alt_index is None:
+            r.alternates = [_pick_dict(r), *r.alternates]
+            r.local_image, r.hosted_url, r.zomato_img = "", "", ""
+            r.status, r.reason = "needs_photo", "Marked by you: needs owner photo"
         else:
-            alternates.pop(alt_index)
-        r.alternates = alternates
-        r.item_name, r.restaurant, r.restaurant_url = alt["item_name"], alt["restaurant"], alt["restaurant_url"]
-        r.zomato_img, r.tier, r.confidence, r.source = alt["zomato_img"], alt["tier"], alt["confidence"], alt["source"]
-        r.local_image = f"images/{sku}.jpg"
-        r.image_size = f"{w}x{h}"
-        (job_dir / r.local_image).write_bytes(jpeg)
-        r.hosted_url = ""
-        if upload and uploader is not None:
             try:
-                r.hosted_url = uploader.upload(jpeg, r.name)
-            except UploadError as exc:
-                raise ValueError(str(exc)) from exc
-        r.status, r.reason = "", ""
-        _settle(r, upload)
+                alt = r.alternates[alt_index]
+            except IndexError:
+                raise ValueError("No such alternate")
+            got = imaging.fetch_full(alt["zomato_img"], engine.http)
+            if got is None:
+                raise ValueError("That photo could not be downloaded")
+            jpeg, (w, h) = got
+            old_pick = _pick_dict(r) if r.zomato_img else None
+            alternates = list(r.alternates)
+            if old_pick is not None:
+                alternates[alt_index] = old_pick
+            else:
+                alternates.pop(alt_index)
+            r.alternates = alternates
+            r.item_name, r.restaurant, r.restaurant_url = alt["item_name"], alt["restaurant"], alt["restaurant_url"]
+            r.zomato_img, r.tier, r.confidence, r.source = alt["zomato_img"], alt["tier"], alt["confidence"], alt["source"]
+            r.local_image = f"images/{sku}.jpg"
+            r.image_size = f"{w}x{h}"
+            (job_dir / r.local_image).write_bytes(jpeg)
+            r.hosted_url = ""
+            if upload and uploader is not None:
+                try:
+                    r.hosted_url = uploader.upload(jpeg, r.name)
+                except UploadError as exc:
+                    raise ValueError(str(exc)) from exc
+            r.status, r.reason = "", ""
+            _settle(r, upload)
 
-    data[idx] = dish_result_to_dict(r)
-    _write_json(results_file, data)
+        data[idx] = dish_result_to_dict(r)
+        _write_json(results_file, data)
 
-    if rebuild:
-        rebuild_outputs(engine, job_dir)
-    else:
-        job["sheets_stale"] = True
-        job["updated"] = _now()
-        _write_json(job_dir / "job.json", job)
+        if rebuild:
+            rebuild_outputs(engine, job_dir)
+        else:
+            job["sheets_stale"] = True
+            job["updated"] = _now()
+            _write_json(job_dir / "job.json", job)
 
-    return r
+
+        return r
