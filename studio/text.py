@@ -229,7 +229,7 @@ def parse_dish(name: str, category: str = "", description: str = "") -> DishQuer
         display=" ".join(name.split()),
         base_key=size_base_key(name),
         variants=tuple(dict.fromkeys(variants)),
-        head=_name_head(name),
+        head=item_head(name, category),
         diet=_diet(proteins, name_toks, name, category),
         proteins=proteins,
         is_combo=is_combo_name(name),

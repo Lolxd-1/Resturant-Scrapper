@@ -247,6 +247,22 @@ def test_same_dish_menu_match_fuzzy_fallback_and_none():
     assert same_dish_menu_match(parse_dish("Thalipeeth", "Starters"), menu, INDEX.idf) is None
 
 
+def test_tune2_tc2_same_product_name_beats_combo_gate_but_not_diet():
+    menu = [make_item("Non Veg Pack Of 4", "Tacos", "nonveg", 1)]
+    c = same_dish_menu_match(parse_dish("Non Veg Pack Of 4", "Tacos"), menu, INDEX.idf)
+    assert c is not None and c.item.name == "Non Veg Pack Of 4" and c.score.tier == "exact"
+    assert c.score.text == 1.0
+    veg_menu = [make_item("Veg Pack Of 4", "Tacos", "nonveg", 2)]
+    assert same_dish_menu_match(parse_dish("Veg Pack Of 4", "Tacos"), veg_menu, INDEX.idf) is None
+
+
+def test_tune2_tc3_same_product_name_ignores_spacing_and_case():
+    menu = [make_item("Cheesy Margherita (Personal Giant Slice)", "Personal Giant Slices", "veg", 1)]
+    c = same_dish_menu_match(parse_dish("Cheesy Margherita(personal Giant Slice)", "Personal Giant Slices"),
+                             menu, INDEX.idf)
+    assert c is not None and c.score.tier == "exact"
+
+
 @pytest.mark.parametrize("dish,target", [
     ("Paneer Pulao", "Paneer Pulav"),
     ("Egg Bhurji", "Anda Bhurji"),

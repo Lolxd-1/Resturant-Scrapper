@@ -165,3 +165,9 @@ def test_category_hints_are_unambiguous():
     assert item_head("Poha", "Tea & Snacks") is None
     assert item_head("Masala", "", "Fried Rice") == "FRIEDRICE"
     assert item_head("Burger with Fries") == "BURGER"
+
+
+def test_tune2_tc4_dish_head_from_own_category():
+    assert parse_dish("Garden Special", "Pizzas").head == "PIZZA"
+    assert parse_dish("Garlic Bread", "Pizza").head == "GARLICBREAD"
+    assert parse_dish("Farmhouse", "Beverages").head is None

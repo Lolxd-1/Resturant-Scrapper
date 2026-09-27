@@ -199,6 +199,25 @@ def test_chain_mode_uses_chain_photos(tmp_path):
     assert any("found on Zomato as chain" in e.get("message", "") for e in env.events)
 
 
+def test_tune2_tc1_chain_uses_pool_outlets_of_same_brand(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizzaco-aundh", [("Garden Special", "Pizzas", "veg", "garden-chain")], res_name="PizzaCo")
+    env.pool("other-place", [("Garden Special Pizza", "Pizzas", "veg", "garden-other")])
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json(
+        [{"entityType": "chain_outlets", "actionInfo": {"clickUrl": "/pune/brands/pizzaco"}}])))
+    env.session.add("https://www.zomato.com/pune/brands/pizzaco", FakeResponse(200, state_html(
+        search_state(["/pune/pizzaco-baner/order", "/pune/pizzaco-kothrud/order"]))))
+    env.page("pizzaco-baner", [("Farmhouse Pizza", "Pizza", "veg", "farm-chain1")], res_name="PizzaCo")
+    env.page("pizzaco-kothrud", [("Farmhouse Pizza", "Pizza", "veg", "farm-chain2")], res_name="PizzaCo")
+    menu = env.menu([["Garden Special", "Pizzas", "", 299]])
+
+    env.run(menu, JobOptions(vendor="PizzaCo", live_search=False), upload=False)
+
+    r = env.results()["Garden Special"]
+    assert r["source"] == "chain" and r["zomato_img"] == IMG + "garden-chain.jpg"
+    assert any(e.get("message") == "Using 3 outlets of PizzaCo" for e in env.events)
+
+
 # ---- TC3: user-supplied own Zomato URL ----
 
 def test_own_restaurant_url(tmp_path):

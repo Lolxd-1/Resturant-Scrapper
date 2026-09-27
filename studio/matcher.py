@@ -15,7 +15,7 @@ from rapidfuzz import fuzz
 
 from studio.lexicon import CURRY_LIKE, HEADS
 from studio.models import Candidate, DishQuery, MatchScore, PoolItem
-from studio.text import is_combo_name, item_head, item_proteins, normalize, token_role, tokens
+from studio.text import is_combo_name, item_head, item_proteins, normalize, size_base_key, token_role, tokens
 
 _TIER_ORDER = {"exact": 0, "strong": 1, "close": 2}
 _TIER_RANGE = {"exact": (0.90, 1.0), "strong": (0.75, 0.8999), "close": (0.55, 0.7499)}
@@ -229,6 +229,10 @@ def rank(q: DishQuery, items: Iterable[PoolItem], idf: Callable[[str], float]) -
 def same_dish_menu_match(q: DishQuery, items: Iterable[PoolItem],
                          idf: Callable[[str], float]) -> Candidate | None:
     items = list(items)
+    # The vendor's own product name wins over the combo/head gates; only diet still applies.
+    for item in items:
+        if q.base_key and size_base_key(item.name) == q.base_key and _diet_ok(q.diet, item.diet):
+            return Candidate(item, MatchScore("exact", 1.0, ("same product name",)))
     ranked = rank(q, items, idf)
     if ranked and ranked[0].score.tier in ("exact", "strong"):
         return ranked[0]
@@ -236,7 +240,7 @@ def same_dish_menu_match(q: DishQuery, items: Iterable[PoolItem],
     best, best_ratio = None, 0.0
     for item in items:
         ratio = fuzz.token_sort_ratio(name, normalize(item.name))
-        if ratio >= _SAME_NAME_RATIO and ratio > best_ratio \
+        if ratio >= _SAME_NAME_RATIO and ratio > best_ratio and _diet_ok(q.diet, item.diet) \
                 and _item_facts(item.name, item.category, item.menu_name)[1] == q.head:
             best, best_ratio = item, ratio
     if best is None:

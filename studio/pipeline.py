@@ -76,6 +76,7 @@ GROUP_CATEGORY = {
 BLOCKED_MESSAGE = "Zomato is limiting requests from this PC; continuing with photos already found."
 NO_KEY_MESSAGE = "No ImgBB API key saved. Add one in Settings."
 FALLBACK_CITIES = ("pune", "mumbai", "ncr", "bangalore")
+MAX_SOURCE_OUTLETS = 25
 DEFAULT_CUISINES = ("north-indian", "street-food", "fast-food")
 SEARCH_ROUNDS = ((0, 3), (3, 8), (8, 20))
 _TIER_RANK = {"exact": 0, "strong": 1, "close": 2}
@@ -495,6 +496,14 @@ class _Run:
             self.say("Vendor not found on Zomato; using photos from other restaurants")
             return
         self.say(f"Vendor found on Zomato as {kind}: {names[0]} ({len(names)} outlets)")
+        # Other outlets of the same brand already in the pool carry products the fetched ones lack.
+        brands = {chain_key(n) for n in names}
+        outlets: dict[str, dict[int, PoolItem]] = {}
+        for it in items + [it for it in engine.store.all_items() if it.chain_key in brands]:
+            outlets.setdefault(it.res_url, {})[it.item_id] = it
+        top = sorted(outlets.values(), key=len, reverse=True)[:MAX_SOURCE_OUTLETS]
+        items = [it for menu in top for it in menu.values()]
+        self.say(f"Using {len(top)} outlets of {names[0]}")
         for g in self.groups:
             self.check()
             hit = same_dish_menu_match(g.q, items, engine.index.idf)
