@@ -35,6 +35,7 @@ _CATEGORY_RE = re.compile(rf"(?<![a-z0-9])({_alternation(CATEGORY_HEAD_HINTS)})(
 _PAREN_RE = re.compile(r"\(([^()]*)\)?")
 _COMBO_SPLIT_RE = re.compile(r"\b(?:and|plus)\b")
 _COMBO_HEAD_SPLIT_RE = re.compile(r"\b(?:and|plus|with)\b")  # "Burger with Fries" -> BURGER
+_NONVEG_WORDS_RE = re.compile(r"\bnon (?:veg|vegetarian)\b")
 _SIZE_TAIL_RE = re.compile(
     r"\s*\b(?:small|medium|large|regular|half|full|quarter|mini|jumbo|single|double)$"
     r"|\s*\b\d+\s*(?:ml|l|ltr|litre|liter|gm|gms|g|gram|grams|kg|pcs|pc|piece|pieces|nos|no|inch|inches)$"
@@ -176,13 +177,24 @@ def _has_hint(padded: str, hints: frozenset[str]) -> bool:
     return any(f" {h} " in padded for h in hints)
 
 
-def _diet(proteins: frozenset[str], name: str, category: str) -> str:
-    padded = f" {normalize(name)} {normalize(category)} "
-    if proteins - {"EGG"} or _has_hint(padded, DIET_HINTS_NONVEG):
+def _diet(proteins: frozenset[str], toks: list[str], name: str, category: str) -> str:
+    # The dish name decides first; the category only breaks ties.
+    if proteins - {"EGG"}:
         return "nonveg"
     if "EGG" in proteins:
         return "egg"
-    if _has_hint(padded, DIET_HINTS_VEG):
+    padded_name = f" {normalize(name)} "
+    if _has_hint(padded_name, DIET_HINTS_NONVEG):
+        return "nonveg"
+    if _has_hint(padded_name, DIET_HINTS_VEG):
+        return "veg"
+    cat = normalize(category)
+    cat_nonveg = _has_hint(f" {cat} ", DIET_HINTS_NONVEG)
+    # "non veg" contains "veg": drop it before looking for a veg hint ("Veg & Non Veg" is mixed)
+    cat_veg = _has_hint(f" {_NONVEG_WORDS_RE.sub(' ', cat)} ", DIET_HINTS_VEG)
+    if cat_nonveg and not cat_veg and not any(t in _BASES for t in toks):
+        return "nonveg"
+    if cat_veg and not cat_nonveg:
         return "veg"
     return "unknown"
 
@@ -207,14 +219,15 @@ def parse_dish(name: str, category: str = "", description: str = "") -> DishQuer
     variants = [frozenset(main)]
     variants += [frozenset(a) for a in aliases]
     variants += [frozenset(main + o) for o in options]
-    proteins = _proteins(main + [t for a in aliases for t in a])
+    name_toks = main + [t for a in aliases for t in a]
+    proteins = _proteins(name_toks)
     return DishQuery(
         raw=name,
         display=" ".join(name.split()),
         base_key=size_base_key(name),
         variants=tuple(dict.fromkeys(variants)),
         head=_name_head(name),
-        diet=_diet(proteins, name, category),
+        diet=_diet(proteins, name_toks, name, category),
         proteins=proteins,
         is_combo=is_combo_name(name),
         category=category,

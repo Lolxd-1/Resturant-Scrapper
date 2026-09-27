@@ -140,6 +140,15 @@ def test_item_proteins_and_keema():
     assert parse_dish("Boiled Egg Fry").variants[0] == frozenset({"BOILEDEGG", "FRY"})
 
 
+def test_diet_name_decides_before_category():
+    assert parse_dish("Paneer Tikka", "Veg & Non Veg Starters").diet == "veg"
+    assert parse_dish("Chicken 65", "Veg & Non Veg Starters").diet == "nonveg"
+    assert parse_dish("Tangdi Kabab", "Non Veg Starters").diet == "nonveg"
+    assert parse_dish("Egg Biryani", "Non Veg Biryani").diet == "egg"
+    assert parse_dish("Dal Fry", "Non Veg").diet == "unknown"
+    assert parse_dish("Dal Fry", "Veg Main Course").diet == "veg"
+
+
 def test_category_hints_are_unambiguous():
     assert item_head("Chocolate", "Thick Shakes") == "SHAKE"
     assert item_head("Aloo", "Indian Breads") is None
