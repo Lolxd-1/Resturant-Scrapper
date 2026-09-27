@@ -35,3 +35,4 @@
 - 2026-09-27T12:06:22Z TUNE2 PASS (+ veg safety fix in same_dish_menu_match fuzzy fallback). dispatch TUNE3 (sonnet)
 - 2026-09-27T12:21:21Z TUNE3 PASS (executor hit maxTurns after committing code; report committed by checkpoint). dispatch UIFIX (sonnet)
 - 2026-09-27T12:37:09Z UIFIX PASS. Headless Edge min layout width is 496px (phone clipping was an artifact); true 390px verified via iframe. dispatch T13 (sonnet)
+- 2026-09-27T12:47:20Z Ruling: T13 Verify line 2 was a plan defect (bash expanded $e/$_ inside double quotes); single-quoted it. Fresh-PC sim: uv + Python 3.12 + 49 pkgs + SELF-TEST OK.
