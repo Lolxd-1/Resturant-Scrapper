@@ -167,7 +167,7 @@ _group("TADKA", "tadka", "tarka", "phodni")
 _group("JEERA", "jeera", "cumin", "zeera")
 _group("ALOO", "aloo", "potato", "batata", "batatyachi")
 _group("KHICHDI", "khichdi", "khichadi")
-_group("BIRYANI", "biryani", "biriyani", "dum")
+_group("BIRYANI", "biryani", "biriyani")
 _group("PULAO", "pulao", "pulav", "pulaav")
 _group("RICE", "rice", "bhaat", "bhat", "chawal")
 _group("MANCHURIAN", "manchurian", "manchuria")
@@ -181,6 +181,7 @@ _group("TAWA", "tawa", "tava")
 _group("BUTTER", "butter", "makkhan", "makhan")
 _group("PALAK", "palak", "spinach", "saag")
 _group("MUSHROOM", "mushroom", "mushrooms", "alambi")
+_group("CHICKEN", "chicken", "murgh", "murghi")
 _group("PANEER", "paneer")
 _group("ONION", "kanda", "onion", "pyaaz", "vengaya")
 _group("TOMATO", "tomato", "tamatar")
@@ -208,7 +209,7 @@ STOP = {"special", "course", "main", "red", "lal", "shree", "kala", "veg",
         # H-FOOD CAFE sizes — "Cheese Pizza - Small/Medium/Large" must all
         # match the same "Cheese Pizza" photo.
         "small", "medium", "large", "regular", "personal", "family",
-        "classic", "combos", "style", "fresh",
+        "classic", "combos", "style", "fresh", "dum",
         # H-FOOD flavour/origin fillers — chai is chai, brownie is brownie.
         "sizzling", "irani", "indori", "tulsi", "adrak",
         # peri-peri is a flavour dust; momos/pizza photo stays correct without it.
@@ -265,8 +266,8 @@ PREF = {
 
 # Any Zomato item containing these words is non-veg -> never picked.
 NONVEG_WORDS = [
-    "chicken", "mutton", "fish", "prawn", "crab", "egg", "pomfret",
-    "surmai", "bombil", "omelette", "omlette", "anda", "kolmi",
+    "chicken", "murgh", "murghi", "mutton", "fish", "prawn", "crab", "egg",
+    "pomfret", "surmai", "bombil", "omelette", "omlette", "anda", "kolmi",
     "non-veg", "nonveg", "meat", "chicken keema", "mutton keema",
     "kheema chicken", "chicken kheema", "fish fry",
 ]
@@ -301,6 +302,10 @@ def toks(name):
 def is_nonveg(item_name):
     low = item_name.lower()
     return any(w in low for w in NONVEG_WORDS)
+
+
+def matching_pool(dish, pairs):
+    return [p for p in pairs if is_nonveg(p["name"]) == is_nonveg(dish)]
 
 
 def log(*a):
@@ -428,15 +433,16 @@ def base_of(d):
 
 def match_dishes(dishes, pairs):
     """Match your dish names to Zomato items. Returns {dish: pick|None}."""
-    veg = [p for p in pairs if not is_nonveg(p["name"])]
-    log(f"veg pairs: {len(veg)}/{len(pairs)}")
+    nonveg = sum(is_nonveg(p["name"]) for p in pairs)
+    log(f"veg pairs: {len(pairs) - nonveg}/{len(pairs)}")
 
     picks, used = {}, {}
     for dish in dishes:
         if dish in NOVEL_DISHES:
             picks[dish] = None
             continue
-        cands = rank_candidates(dish, veg)
+        pool = matching_pool(dish, pairs)
+        cands = rank_candidates(dish, pool)
         base = base_of(dish)
         # Size variants (Small/Medium/Large) may share one photo; different
         # dishes never share.
@@ -452,7 +458,7 @@ def match_dishes(dishes, pairs):
             picks[dish] = None
     # Manual corrections win over automation.
     by_name = {}
-    for p in veg:
+    for p in pairs:
         by_name.setdefault((p["name"], p["rest"]), p)
     for dish, (iname, rest) in MANUAL_OVERRIDES.items():
         hit = by_name.get((iname, rest))
@@ -592,7 +598,6 @@ def diagnose_misses(dishes, pairs, picks):
       the MATCHER rejects true photos -> fix toks/STOP/CANON (plurals,
       "N"=and, origin words) instead of adding restaurants.
     """
-    veg = [p for p in pairs if not is_nonveg(p["name"])]
     for dish in dishes:
         if picks.get(dish):
             continue
@@ -601,7 +606,7 @@ def diagnose_misses(dishes, pairs, picks):
             continue
         dt = toks(dish)
         near = []
-        for p in veg:
+        for p in matching_pool(dish, pairs):
             pt = toks(p["name"])
             if not dt or not pt:
                 continue
@@ -672,6 +677,20 @@ def main():
                                       sku_prefix, prev)
         (out_dir / "results.json").write_text(json.dumps(results, indent=1))
         (out_dir / "picks.json").write_text(json.dumps(picks, indent=1))
+    if args.stage == "download":
+        log("DOWNLOAD done.")
+        return
+    results = json.loads((out_dir / "results.json").read_text())
+
+    if args.stage in ("all", "build"):
+        ready, pending = build_sheet(args.menu_excel, args.template, out_dir,
+                                     results, sku_prefix)
+        novel = [v["name"] for v in results.values() if not v.get("imgbb")]
+        (out_dir / "novel_list.txt").write_text("\n".join(sorted(novel)))
+        log(f"READY: {ready} | PENDING: {pending} | NOVEL: {len(novel)}")
+    return
+
+
 def run_download(dishes, picks, pairs, out_dir, api_key, sku_prefix="SKU",
                  prev=None, progress=None):
     """Download + ImageBB-upload every matched pick. Shared by CLI and app.
@@ -688,7 +707,6 @@ def run_download(dishes, picks, pairs, out_dir, api_key, sku_prefix="SKU",
     results, idx_of = {}, {d: i + 1 for i, d in enumerate(dishes)}
     prev = prev or {}
     imgbb_cache = {}  # zomato img url -> (imgbb link, "WxH")
-    veg = [p for p in pairs if not is_nonveg(p["name"])]
     dl_failed = set()  # zomato imgs that failed the quality gate this run
     total = len(picks)
     for n, (dish, pick) in enumerate(picks.items(), start=1):
@@ -718,7 +736,7 @@ def run_download(dishes, picks, pairs, out_dir, api_key, sku_prefix="SKU",
                        "rest": pick["rest"]})]
             # Fallback: SAME ranking the matcher used, so we only ever
             # try photos the matcher approved (score >= 0.4).
-            for score, p in rank_candidates(dish, veg)[:12]:
+            for score, p in rank_candidates(dish, matching_pool(dish, pairs))[:12]:
                 if score < 0.4:
                     break
                 entry = (score, {"name": p["name"], "img": p["img"],
@@ -774,19 +792,6 @@ def run_download(dishes, picks, pairs, out_dir, api_key, sku_prefix="SKU",
             progress(n, total, f"{sku} {'done' if done else 'no photo'}")
         time.sleep(0.5)
     return results, picks
-
-
-    if args.stage == "download":
-        log("DOWNLOAD done.")
-        return
-    results = json.loads((out_dir / "results.json").read_text())
-
-    if args.stage in ("all", "build"):
-        ready, pending = build_sheet(args.menu_excel, args.template, out_dir,
-                                     results, sku_prefix)
-        novel = [v["name"] for v in results.values() if not v.get("imgbb")]
-        (out_dir / "novel_list.txt").write_text("\n".join(sorted(novel)))
-        log(f"READY: {ready} | PENDING: {pending} | NOVEL: {len(novel)}")
 
 
 if __name__ == "__main__":
