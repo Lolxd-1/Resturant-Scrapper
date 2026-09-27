@@ -8,7 +8,7 @@ updated: 2026-09-27T08:10:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-T11 in flight. Open: user asked (Learning style) to fill TODO(human) in studio/pipeline.py _combine_scores. First live run Shivraj: 16/18, 16/16 correct by visual audit. Then T12, T13, T15, EVAL, FINAL.
+TUNE1 in flight, then TUNE2, TUNE3, UIFIX, T13, T15, re-EVAL (6 menus in scratchpad/eval_menus), FINAL review, push prodv2.0. Live eval so far: SBH 16/16 then 18/18 real job; HFC 85/101 all correct; GEV 70/81; GB 92%; LPP 26/35 (chain gaps -> TUNE2); DP crashed (disk full). User TODO(human) open in pipeline._combine_scores.
 
 ## Baseline
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
@@ -29,7 +29,11 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T10F Fix sheet clear, per-restaurant load, blocked reset — done 0653912..274a102 (gate PASS)
 - [x] T10B Photo swap + CLI — o12 — done c7f9f59..7c343f7 (gate PASS)
 - [x] T11 Server + app.py — o13 — done 644ba65..378cb7f (gate PASS; test_server slow 111 s -> FIX queue)
-- [~] T12 Web UI — o14 — attempt=1
+- [x] T12 Web UI — o14 — done adb920f..20b7ba9 (gate PASS; committed by orchestrator; UI bugs -> UIFIX)
+- [~] TUNE1 Vision veto calibration — attempt=1
+- [ ] TUNE2 Chain coverage (all outlets, exact names, dish-category head) — deps TUNE1
+- [ ] TUNE3 Brand guard (OCR) — deps TUNE2
+- [ ] UIFIX Phone overflow, stray edge lines, disk-space warning, test_server speed, tools sys.path — deps TUNE3
 - [ ] T13 Launcher + README — o15 — deps T11
 - [ ] T15 Eval tool — o16 — deps T10B
 - [ ] EVAL Live eval + audit + tuning (orchestrator) — deps T15 DATA1

@@ -29,3 +29,5 @@
 - 2026-09-27T10:36:52Z T10F PASS. dispatch T10B (sonnet). Orchestrator starts first live dry run (Shivraj) outside the repo.
 - 2026-09-27T10:47:02Z T10B PASS. Live dry run Shivraj: 16/18 ready, 16/16 visually correct, 150 s. Extracted _combine_scores (4ed3ca4) with TODO(human) for the user. dispatch T11 (sonnet)
 - 2026-09-27T11:06:12Z T11 PASS. FIX-QUEUE: tests/test_server.py takes 111 s. dispatch T12 (opus)
+- 2026-09-27T11:35:48Z DISK FULL (477G drive at 100%) crashed Dominos eval; removed my own benchmark caches (3.5 GB). FIX-QUEUE: free-space check (warn < 1.5 GB at startup/job start, friendly error on OSError 28). T12 executor BLOCKED by CPU contention from my evals + denied Bash; it asked me to kill PID 19372 -> refused (not laundering a denied action), surfaced to user. Orchestrator re-verifies T12.
+- 2026-09-27T11:54:15Z Live evals + real job in app (18/18 uploaded). Findings -> TUNE1 (vision veto), TUNE2 (chain), TUNE3 (OCR brand guard: 2/278 zomato props), UIFIX. dispatch TUNE1 (sonnet)
