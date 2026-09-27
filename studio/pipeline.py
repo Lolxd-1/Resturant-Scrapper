@@ -166,6 +166,21 @@ def _write_json(path: Path, data) -> None:
     os.replace(tmp, path)
 
 
+def _combine_scores(c: Candidate, big_brand: bool) -> float:
+    """Rank score (about 0..1) for a candidate that already passed every hard gate.
+
+    Inputs, all 0..1: c.score.text (name match; exact >= 0.90, strong 0.75-0.90,
+    close 0.55-0.75), c.consensus (how much this photo agrees with the other
+    candidates' photos of the same dish), c.vision (CLIP similarity between the
+    photo and the dish name). big_brand: photo comes from a big chain that is not
+    the vendor (may show that chain's logo box). Candidates are sorted by tier
+    first, so this only orders photos WITHIN a tier.
+    """
+    # TODO(human): choose the weighting policy (the line below is the baseline default).
+    score = 0.60 * c.score.text + 0.20 * c.consensus + 0.20 * c.vision
+    return score - 0.03 if big_brand else score
+
+
 def _cand_dict(c: Candidate) -> dict:
     return {
         "item_name": c.item.name, "restaurant": c.item.res_name, "restaurant_url": c.item.res_url,
@@ -626,10 +641,9 @@ class _Run:
                 c.consensus, c.vision = float(cons[j]), float(ts[j])
                 if not (c.food_ok and c.type_ok):
                     continue
-                c.final = 0.60 * c.score.text + 0.20 * c.consensus + 0.20 * c.vision
-                if c.source in ("pool", "live") and sizes[c.item.chain_key] >= 5 \
-                        and c.item.chain_key != self.vendor_key:
-                    c.final -= 0.03
+                big_brand = (c.source in ("pool", "live") and sizes[c.item.chain_key] >= 5
+                             and c.item.chain_key != self.vendor_key)
+                c.final = _combine_scores(c, big_brand)
                 kept.append(c)
         else:
             for c in survivors:
