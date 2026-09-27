@@ -8,7 +8,7 @@ updated: 2026-09-27T08:10:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-T02 in flight; DATA1 crawl running in background (commit data/seed_pool.jsonl.gz when it finishes). Then T03, T06...
+T07 in flight. Then T08, T09, T10, T10B, T11, T12, T13, T15, EVAL (eval menus in scratchpad/eval_menus), FINAL.
 
 ## Baseline
 Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has no test suite. Every test in this run is new.
@@ -18,11 +18,11 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T04 Zomato client + parsers — o2 — done f3e3014..4c3ac28 (gate PASS; scope hit = orchestrator .gitignore fix)
 - [x] T05 Pool store — o3 — done fc7b91f..29a74af (gate PASS)
 - [x] T14 Seed pool builder tool — o4 — done b70c54a..7aadf3b (gate PASS)
-- [~] DATA1 Seed crawl + commit seed_pool (orchestrator) — bg — running, log %LOCALAPPDATA%MenuStudioseed_crawl.log
+- [x] DATA1 Seed crawl + commit seed_pool — done 85fc73d (2,311 restaurants, 137,893 items, 20 cities)
 - [x] T02 Menu reader — o5 — done 2c0ac0e..1f40f76 (gate PASS)
 - [x] T03 Lexicon + text — o6 — done 0e9016a..d9e5c07 (gate PASS)
-- [~] T06 Matcher + golden set — o7 — attempt=1 fix-round=1 agent=a04dd7d9f85786e55
-- [ ] T07 Imaging + vision — o8 — deps T03 T04 T05
+- [x] T06 Matcher + golden set — o7 — done 4f1bb4f..3b6d625 (gate PASS after round 1; scope hit = DATA1 commit)
+- [~] T07 Imaging + vision — o8 — attempt=1
 - [ ] T08 ImgBB uploader — o9 — deps T05
 - [ ] T09 Sheets builder — o10 — deps T01
 - [ ] T10 Pipeline engine — o11 — deps T02-T09
