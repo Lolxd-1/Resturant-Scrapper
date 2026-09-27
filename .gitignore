@@ -34,3 +34,4 @@ outputs/
 *.tmp
 *.bad
 !data/seed_pool.jsonl.gz
+!studio/web/*.html
