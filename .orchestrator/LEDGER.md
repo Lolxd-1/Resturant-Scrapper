@@ -22,3 +22,4 @@
 - 2026-09-27T08:49:24Z T06 review CHANGES_REQUIRED (1 critical combo, 2 important) + orchestrator live-pool findings; fix round 1 -> resume T06 executor
 - 2026-09-27T08:55:16Z T06 PASS (round 1). Accepted concerns: CURRY_LIKE {CURRY,masala} counts as one match; 'kala' soft instead of KALAMASALA phrase. DATA1 committed 85fc73d. dispatch T07 (sonnet); T06 rereview in background pinned to e56b05d..3b6d625
 - 2026-09-27T09:04:59Z T06 rereview APPROVE. T07 PASS (CURRY->DAL in TC5). dispatch T08 (sonnet)
+- 2026-09-27T09:12:21Z T08 PASS. Ruling: live test (bad key disabled -> rotated to real key, upload OK, no key in states) replaces the sonnet task review — cost if wrong: a subtle rotation bug caught later in EVAL. dispatch T09 (sonnet)
