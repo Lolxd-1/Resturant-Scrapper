@@ -31,8 +31,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T11 Server + app.py — o13 — done 644ba65..378cb7f (gate PASS; test_server slow 111 s -> FIX queue)
 - [x] T12 Web UI — o14 — done adb920f..20b7ba9 (gate PASS; committed by orchestrator; UI bugs -> UIFIX)
 - [x] TUNE1 Vision veto calibration — done 5cf91c2..9b3acfc (gate PASS; resumed once after maxTurns)
-- [~] TUNE2 Chain coverage (all outlets, exact names, dish-category head) — attempt=1
-- [ ] TUNE3 Brand guard (OCR) — deps TUNE2
+- [x] TUNE2 Chain coverage — done b9752bb..6e90ade (gate PASS; fixed missing diet check in fuzzy chain fallback)
+- [~] TUNE3 Brand guard (OCR) — attempt=1
 - [ ] UIFIX Phone overflow, stray edge lines, disk-space warning, test_server speed, tools sys.path — deps TUNE3
 - [ ] T13 Launcher + README — o15 — deps T11
 - [ ] T15 Eval tool — o16 — deps T10B
