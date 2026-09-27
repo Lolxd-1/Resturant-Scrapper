@@ -197,6 +197,34 @@ def test_tc8_listing_unique_canonical_urls():
     ]
 
 
+# ---- S2 TC3: listing() with a locality builds the locality URL; localities() parses slugs ----
+
+def test_s2_tc3_listing_with_locality_builds_locality_url():
+    html = '<a href="/pune/kothrud-abc/info">A</a>'
+    fake_session = FakeSession()
+    fake_session.add("https://www.zomato.com/pune/kothrud-restaurants/maharashtrian",
+                      FakeResponse(200, text=html))
+    client = ZomatoClient(make_http(fake_session))
+    urls = client.listing("pune", "maharashtrian", "kothrud")
+    assert urls == ["https://www.zomato.com/pune/kothrud-abc"]
+    assert fake_session.calls[0][0] == "https://www.zomato.com/pune/kothrud-restaurants/maharashtrian"
+
+
+def test_s2_tc3_localities_parses_slugs_and_excludes_and_dedupes():
+    html = (
+        '<a href="/pune/kothrud-restaurants">Kothrud</a>'
+        '<a href="/pune/baner-restaurants/pizza">Baner Pizza</a>'
+        '<a href="/pune/kothrud-restaurants">Kothrud again</a>'
+        '<a href="/pune/best-restaurants">Best</a>'
+        '<a href="/pune/delivery-restaurants">Delivery</a>'
+    )
+    fake_session = FakeSession()
+    fake_session.add("https://www.zomato.com/pune/restaurants", FakeResponse(200, text=html))
+    client = ZomatoClient(make_http(fake_session))
+    locs = client.localities("pune")
+    assert locs == ["kothrud", "baner"]
+
+
 # ---- TC9: chain_outlets walks SECTION_SEARCH_RESULT, skips entries without cardAction ----
 
 def test_tc9_chain_outlets_skips_entries_without_card_action():

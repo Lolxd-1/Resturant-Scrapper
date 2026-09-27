@@ -23,7 +23,7 @@ from studio import imaging, sheets
 from studio.brand import GENERIC, BrandGuard, brand_words_from_pool
 from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, atomic_write_text, models_dir, pool_db_path
 from studio.hosting import UploadError, Uploader
-from studio.lexicon import HEAD_CUISINES, HEAD_GROUP
+from studio.lexicon import HEAD_CUISINES, HEAD_GROUP, TOKEN_CUISINES
 from studio.matcher import PoolIndex, rank, same_dish_menu_match
 from studio.menu import derive_sku_prefix, read_menu
 from studio.models import (
@@ -156,6 +156,19 @@ def list_jobs(output_dir: Path) -> list[dict]:
 
 def infer_category(q: DishQuery) -> str:
     return GROUP_CATEGORY.get(HEAD_GROUP.get(q.head or ""), "Menu")
+
+
+def _cuisines_for(q: DishQuery) -> tuple[str, ...]:
+    """Cuisine slugs to crawl for a dish: its head's cuisines, else the cuisines its
+    dish-name words imply (Kaju Kolhapuri has no head word but "kolhapuri" does)."""
+    if q.head:
+        return HEAD_CUISINES.get(q.head, DEFAULT_CUISINES)
+    found: list[str] = []
+    for t in (q.variants[0] if q.variants else ()):
+        for c in TOKEN_CUISINES.get(t, ()):
+            if c not in found:
+                found.append(c)
+    return tuple(found) if found else DEFAULT_CUISINES
 
 
 class _Group:
@@ -644,8 +657,8 @@ class _Run:
                 per_group = []
                 for i, g in enumerate(unresolved):
                     self.check()
-                    text = _query_text(g.rows[0].name)
-                    cuisines = HEAD_CUISINES.get(g.q.head, DEFAULT_CUISINES)[:2]
+                    text = _query_text(g.q.raw)
+                    cuisines = _cuisines_for(g.q)[:3]
                     urls = []
                     for city in round_cities:
                         try:

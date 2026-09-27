@@ -112,12 +112,52 @@ def _safe_fetch(client: ZomatoClient, url: str):
 
 
 def crawl(store: PoolStore, client: ZomatoClient, cities: list[str], cuisines: list[str],
-          max_restaurants: int, workers: int, log=print) -> int:
+          max_restaurants: int, workers: int, localities: int = 0, log=print) -> int:
     fetched = 0
     seen_urls: set[str] = set()
     blocked_once = False
 
+    def fetch_batch(urls: list[str], label: str) -> bool:
+        """Fetch new restaurant menus from one listing page. Returns True to stop the crawl."""
+        nonlocal fetched, blocked_once
+        todo = []
+        for url in urls:
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            if store.menu_fetched_at(url) is not None:
+                continue
+            todo.append(url)
+        if not todo:
+            return False
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(lambda u: _safe_fetch(client, u), todo))
+
+        for menu, blocked in results:
+            if blocked:
+                if blocked_once:
+                    return True
+                log("Blocked by Zomato; waiting 10 minutes")
+                time.sleep(600)
+                blocked_once = True
+                continue
+            if menu is not None:
+                store.upsert_menu(menu)
+                fetched += 1
+                if fetched % 25 == 0:
+                    log(f"[{label}] {fetched} restaurants, {store.count_items():,} items")
+            if fetched >= max_restaurants:
+                return True
+        return False
+
     for city in cities:
+        locs: list[str] = []
+        if localities > 0:
+            try:
+                locs = client.localities(city)[:localities]
+            except ZomatoBlocked:
+                locs = []
         for cuisine in cuisines:
             try:
                 urls = client.listing(city, cuisine)
@@ -128,35 +168,20 @@ def crawl(store: PoolStore, client: ZomatoClient, cities: list[str], cuisines: l
                 time.sleep(600)
                 blocked_once = True
                 continue
+            if fetch_batch(urls, f"{city}/{cuisine}"):
+                return fetched
 
-            todo = []
-            for url in urls:
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
-                if store.menu_fetched_at(url) is not None:
-                    continue
-                todo.append(url)
-            if not todo:
-                continue
-
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                results = list(pool.map(lambda u: _safe_fetch(client, u), todo))
-
-            for menu, blocked in results:
-                if blocked:
+            for loc in locs:
+                try:
+                    urls = client.listing(city, cuisine, loc)
+                except ZomatoBlocked:
                     if blocked_once:
                         return fetched
                     log("Blocked by Zomato; waiting 10 minutes")
                     time.sleep(600)
                     blocked_once = True
                     continue
-                if menu is not None:
-                    store.upsert_menu(menu)
-                    fetched += 1
-                    if fetched % 25 == 0:
-                        log(f"[{city}/{cuisine}] {fetched} restaurants, {store.count_items():,} items")
-                if fetched >= max_restaurants:
+                if fetch_batch(urls, f"{city}/{loc}/{cuisine}"):
                     return fetched
     return fetched
 
@@ -202,6 +227,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cuisines", default="all")
     parser.add_argument("--max-restaurants", type=int, default=2000)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--localities", type=int, default=0,
+                         help="also crawl this many locality listings per city (0 = off)")
+    parser.add_argument("--extra-cities", default="",
+                         help="comma-separated city slugs not in studio.zomato.CITIES, e.g. kolhapur,satara")
     parser.add_argument("--export")
     return parser
 
@@ -229,8 +258,11 @@ def main(argv: list[str] | None = None) -> None:
             cuisines = list(CUISINE_SLUGS) if args.cuisines == "all" else [
                 c.strip() for c in args.cuisines.split(",") if c.strip()
             ]
+            extra_cities = [c.strip() for c in args.extra_cities.split(",") if c.strip()]
+            cities += [c for c in extra_cities if c not in cities]
             client = ZomatoClient(Http())
-            n = crawl(store, client, cities, cuisines, args.max_restaurants, args.workers)
+            n = crawl(store, client, cities, cuisines, args.max_restaurants, args.workers,
+                      localities=args.localities)
             print(f"crawl: fetched {n} new restaurants")
         if args.export:
             export_seed(store, Path(args.export))

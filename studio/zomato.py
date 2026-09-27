@@ -81,6 +81,7 @@ _STATE_RE = re.compile(r'__PRELOADED_STATE__\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)
 _WS_RE = re.compile(r"\s+")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 _DIET_MAP = {"veg": "veg", "non-veg": "nonveg", "egg": "egg"}
+_LOCALITY_EXCLUDE = frozenset({"delivery", "best", "new"})
 
 
 class ZomatoBlocked(Exception):
@@ -363,11 +364,28 @@ class ZomatoClient:
                 dishes.append((entry.get("entityId", ""), entry.get("name", "")))
         return SuggestResult(restaurants=restaurants, chains=chains, dishes=dishes)
 
-    def listing(self, city: str, cuisine: str) -> list[str]:
-        resp = self.http.get(f"https://www.zomato.com/{city}/restaurants/{cuisine}")
+    def listing(self, city: str, cuisine: str, locality: str = "") -> list[str]:
+        prefix = f"{locality}-restaurants" if locality else "restaurants"
+        resp = self.http.get(f"https://www.zomato.com/{city}/{prefix}/{cuisine}")
         if resp is None:
             return []
         return _extract_res_urls(resp.text, city)
+
+    def localities(self, city: str) -> list[str]:
+        resp = self.http.get(f"https://www.zomato.com/{city}/restaurants")
+        if resp is None:
+            return []
+        pattern = re.compile(rf"/{re.escape(city)}/([a-z0-9-]+)-restaurants(?:[/\"?]|$)")
+        seen: set[str] = set()
+        out: list[str] = []
+        for slug in pattern.findall(resp.text):
+            if slug in seen or slug in _LOCALITY_EXCLUDE:
+                continue
+            seen.add(slug)
+            out.append(slug)
+            if len(out) >= 40:
+                break
+        return out
 
     def chain_outlets(self, chain_url: str) -> list[str]:
         url = _absolute_url(chain_url)

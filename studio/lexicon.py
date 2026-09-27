@@ -419,6 +419,52 @@ HEAD_CUISINES: dict[str, tuple[str, ...]] = {
     "HANDI": ("north-indian", "mughlai"),
 }
 
+# canonical token -> Zomato cuisine slugs to crawl when a dish has no head (dish-type word),
+# so live search still lands on listings for the right regional/style cuisine.
+TOKEN_CUISINES: dict[str, tuple[str, ...]] = {
+    "kolhapuri": ("maharashtrian",),
+    "malvani": ("maharashtrian",),
+    "PITLA": ("maharashtrian",),
+    "BHAKRI": ("maharashtrian",),
+    "MATKI": ("maharashtrian",),
+    "MISAL": ("maharashtrian",),
+    "usal": ("maharashtrian",),
+    "kanduri": ("maharashtrian",),
+    "vajadi": ("maharashtrian",),
+    "CURRY": ("maharashtrian",),
+    "sukka": ("maharashtrian",),
+    "tambda": ("maharashtrian",),
+    "pandhra": ("maharashtrian",),
+    "solkadhi": ("maharashtrian",),
+    "SHEVGA": ("maharashtrian",),
+    "BAJRA": ("maharashtrian",),
+    "JOWAR": ("maharashtrian",),
+    "RAGI": ("maharashtrian",),
+    "hyderabadi": ("hyderabadi", "biryani"),
+    "HANDI": ("north-indian", "mughlai"),
+    "kofta": ("north-indian", "mughlai"),
+    "lababdar": ("north-indian", "mughlai"),
+    "KADAI": ("north-indian", "mughlai"),
+    "MAKHANI": ("north-indian", "mughlai"),
+    "lajawab": ("north-indian", "mughlai"),
+    "malai": ("north-indian", "mughlai"),
+    "shahi": ("north-indian", "mughlai"),
+    "kasuri": ("north-indian", "mughlai"),
+    "BUTTER": ("north-indian", "mughlai"),
+    "TIKKA": ("north-indian", "mughlai"),
+    "KEEMA": ("north-indian", "mughlai"),
+    "CURD": ("north-indian", "mughlai"),
+    "MANCHURIAN": ("chinese",),
+    "SCHEZWAN": ("chinese",),
+    "CHILLI": ("chinese",),
+    "NOODLES": ("chinese",),
+    "FRIEDRICE": ("chinese",),
+    "TANDOORI": ("north-indian", "kebab"),
+    "KEBAB": ("north-indian", "kebab"),
+    "FISH": ("seafood", "maharashtrian"),
+    "PRAWN": ("seafood", "maharashtrian"),
+}
+
 # token -> protein. Fish species stay distinct tokens (a pomfret does not look like surmai)
 # but all count as FISH protein.
 PROTEINS: dict[str, str] = {

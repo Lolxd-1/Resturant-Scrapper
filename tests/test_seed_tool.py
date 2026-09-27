@@ -9,8 +9,9 @@ import pytest
 import tools.build_seed_pool as build_seed_pool
 from studio.models import PoolItem, RestaurantMenu
 from studio.store import PoolStore
-from studio.zomato import ZomatoBlocked
-from tools.build_seed_pool import crawl, export_seed, import_cache, import_pairs
+from studio.zomato import Http, ZomatoBlocked, ZomatoClient
+from tools.build_seed_pool import _build_parser, crawl, export_seed, import_cache, import_pairs
+from tests.conftest import FakeResponse, FakeSession
 from tests.fixtures.zomato.make_pages import item, menu_state, state_html
 
 
@@ -188,6 +189,38 @@ def test_tc5_crawl_blocked_twice_returns_cleanly(tmp_path, monkeypatch):
     assert sleeps == [600]
     assert client.listing_calls == 2
     store.close()
+
+
+# ---- S2 TC4: --localities N crawls locality listings too; --extra-cities is accepted ----
+
+def test_s2_tc4_crawl_localities_requests_locality_listing_urls(tmp_path):
+    fake_session = FakeSession()
+    fake_session.add("https://www.zomato.com/pune/restaurants",
+                      FakeResponse(200, text=(
+                          '<a href="/pune/kothrud-restaurants">Kothrud</a>'
+                          '<a href="/pune/baner-restaurants">Baner</a>'
+                          '<a href="/pune/wakad-restaurants">Wakad</a>'
+                      )))
+    fake_session.add("https://www.zomato.com/pune/restaurants/north-indian", FakeResponse(200, text=""))
+    fake_session.add("https://www.zomato.com/pune/kothrud-restaurants/north-indian", FakeResponse(200, text=""))
+    fake_session.add("https://www.zomato.com/pune/baner-restaurants/north-indian", FakeResponse(200, text=""))
+    http = Http(session=fake_session, min_interval=0.0, sleep=lambda s: None)
+    client = ZomatoClient(http)
+    store = PoolStore(tmp_path / "pool.sqlite")
+
+    crawl(store, client, ["pune"], ["north-indian"], max_restaurants=10, workers=1, localities=2)
+
+    called = {url for url, _ in fake_session.calls}
+    assert "https://www.zomato.com/pune/kothrud-restaurants/north-indian" in called
+    assert "https://www.zomato.com/pune/baner-restaurants/north-indian" in called
+    assert "https://www.zomato.com/pune/wakad-restaurants/north-indian" not in called
+    store.close()
+
+
+def test_s2_tc4_extra_cities_flag_accepted():
+    args = _build_parser().parse_args(["--crawl", "--extra-cities", "kolhapur,satara", "--localities", "2"])
+    assert args.extra_cities == "kolhapur,satara"
+    assert args.localities == 2
 
 
 # ---- TC4: export_seed -> gzip JSONL with the exact seed keys; ensure_seeded round-trips ----

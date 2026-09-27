@@ -260,6 +260,40 @@ def test_live_search_multi_city_and_persist(tmp_path):
     assert not any(url.endswith("/order") for url, _ in env.session.calls[before:])
 
 
+# ---- S2 TC1: a dish with no head word crawls the cuisine its words imply ----
+
+def test_s2_tc1_word_driven_cuisine_crawl(tmp_path):
+    env = Env(tmp_path)
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    env.session.add("https://www.zomato.com/pune/restaurants/maharashtrian",
+                    FakeResponse(200, '<a href="/pune/kaju-place/order">Kaju Place</a>'))
+    env.page("kaju-place", [("Kaju Kolhapuri", "Mains", "veg", "kaju1"),
+                            ("Chicken Biryani", "Mains", "nonveg", "cb1"),
+                            ("Paneer Tikka", "Starters", "veg", "pt1"),
+                            ("Veg Fried Rice", "Rice", "veg", "vfr1")])
+    menu = env.menu([["Kaju Kolhapuri", "Mains", "", 199]])
+
+    env.run(menu, JobOptions(vendor="Tiny Place", city="pune"), upload=False)
+
+    r = env.results()["Kaju Kolhapuri"]
+    assert r["status"] == "ready" and r["source"] == "live"
+    assert any(url == "https://www.zomato.com/pune/restaurants/maharashtrian"
+               for url, _ in env.session.calls)
+
+
+# ---- S2 TC2: the suggest query uses the spell-corrected dish name ----
+
+def test_s2_tc2_suggest_query_uses_corrected_text(tmp_path):
+    env = Env(tmp_path)
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    menu = env.menu([["MASHRUM KOLHAPURI", "Mains", "", 199]])
+
+    env.run(menu, JobOptions(vendor="Tiny Place", city="pune"), upload=False)
+
+    suggest_calls = [params for url, params in env.session.calls if url == SUGGEST]
+    assert any(p["q"] == "mushroom kolhapuri" for p in suggest_calls)
+
+
 # ---- TC5: Zomato blocks every request ----
 
 def test_blocked_continues(tmp_path):
