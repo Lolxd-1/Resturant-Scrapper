@@ -1,0 +1,230 @@
+{
+ "ncr": {
+  "id": 1,
+  "name": "Delhi NCR",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "mumbai": {
+  "id": 3,
+  "name": "Mumbai",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "bangalore": {
+  "id": 4,
+  "name": "Bengaluru",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "pune": {
+  "id": 5,
+  "name": "Pune",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "hyderabad": {
+  "id": 6,
+  "name": "Hyderabad",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "chennai": {
+  "id": 7,
+  "name": "Chennai",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "kolkata": {
+  "id": 2,
+  "name": "Kolkata",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "ahmedabad": {
+  "id": 11,
+  "name": "Ahmedabad",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "jaipur": {
+  "id": 10,
+  "name": "Jaipur",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "lucknow": {
+  "id": 8,
+  "name": "Lucknow",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "chandigarh": {
+  "id": 12,
+  "name": "Chandigarh",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "indore": {
+  "id": 14,
+  "name": "Indore",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "nagpur": {
+  "id": 33,
+  "name": "Nagpur",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "nashik": {
+  "id": 16,
+  "name": "Nashik",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "surat": {
+  "id": 38,
+  "name": "Surat",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "vadodara": {
+  "id": 32,
+  "name": "Vadodara",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "kochi": {
+  "id": 9,
+  "name": "Kochi",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "coimbatore": {
+  "id": 30,
+  "name": "Coimbatore",
+  "status": 200,
+  "listing_restaurants": 8
+ },
+ "goa": {
+  "id": 13,
+  "name": "Goa",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "bhopal": {
+  "id": 26,
+  "name": "Bhopal",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "aurangabad": {
+  "id": 25,
+  "name": "Aurangabad",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "kolhapur": {
+  "id": 11334,
+  "name": "Kolhapur",
+  "status": 200,
+  "listing_restaurants": 0
+ },
+ "visakhapatnam": {
+  "id": 28,
+  "name": "Visakhapatnam",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "bhubaneswar": {
+  "id": 29,
+  "name": "Bhubaneswar",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "guwahati": {
+  "id": 21,
+  "name": "Guwahati",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "dehradun": {
+  "id": 35,
+  "name": "Dehradun",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "ludhiana": {
+  "id": 20,
+  "name": "Ludhiana",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "amritsar": {
+  "id": 22,
+  "name": "Amritsar",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "mysore": {
+  "id": 36,
+  "name": "Mysore",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "mangalore": {
+  "id": 31,
+  "name": "Mangalore",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "thiruvananthapuram": {
+  "id": null,
+  "name": null,
+  "status": 404,
+  "listing_restaurants": 0
+ },
+ "patna": {
+  "id": 40,
+  "name": "Patna",
+  "status": 200,
+  "listing_restaurants": 8
+ },
+ "ranchi": {
+  "id": 27,
+  "name": "Ranchi",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "raipur": {
+  "id": 11310,
+  "name": "Raipur",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "udaipur": {
+  "id": 11054,
+  "name": "Udaipur",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "agra": {
+  "id": 34,
+  "name": "Agra",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "varanasi": {
+  "id": 39,
+  "name": "Varanasi",
+  "status": 200,
+  "listing_restaurants": 9
+ },
+ "kanpur": {
+  "id": 23,
+  "name": "Kanpur",
+  "status": 200,
+  "listing_restaurants": 9
+ }
+}
