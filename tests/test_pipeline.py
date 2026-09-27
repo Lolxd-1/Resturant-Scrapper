@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import threading
 import zlib
 from collections import Counter
@@ -11,9 +12,10 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import openpyxl
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from studio import pipeline
+from studio.brand import BrandGuard
 from studio.hosting import Uploader
 from studio.imaging import THUMB_SUFFIX
 from studio.models import Candidate, DishQuery, ImgbbKey, MatchScore, PoolItem, RestaurantMenu
@@ -517,3 +519,113 @@ def test_tune1_tc5_food_prob_010_rejected_every_tier(tmp_path, monkeypatch):
         cand = _candidate("r1", f"https://img/{tier}.jpg", tier)
         _run_verify_group(env, [cand], monkeypatch=monkeypatch, food=[0.10], margin=[np.inf])
         assert cand.food_ok is False
+
+
+# ---- TUNE3: brand guard (real RapidOCR reads visible text in photos) ----
+
+def branded_jpeg(word: str, seed: int = 0) -> bytes:
+    """A noisy but valid photo with `word` printed in a clear block of text."""
+    blocks = np.random.default_rng(seed).integers(0, 256, (6, 6, 3), dtype=np.uint8)
+    img = Image.fromarray(blocks).resize((420, 420), Image.NEAREST).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([10, 160, 410, 260], fill=(255, 255, 255))
+    draw.text((20, 175), word, fill=(0, 0, 0), font=ImageFont.truetype("arial.ttf", 48))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+def preset_image(env, name: str, content: bytes) -> str:
+    """Register `content` for an image name before env.pool()/env.page() claim it."""
+    url = IMG + name + ".jpg"
+    env.session.add(url, FakeResponse(200, content=content))
+    return url
+
+
+def _photo_option(url: str, res: str) -> dict:
+    return {"item_name": "Cheese Pizza", "restaurant": res, "restaurant_url": f"https://www.zomato.com/pune/{res}",
+            "zomato_img": url, "tier": "exact", "confidence": 0.9, "source": "pool"}
+
+
+def _photo_group_fixture(options: list[dict]) -> pipeline._Group:
+    q = DishQuery(raw="Cheese Pizza", display="Cheese Pizza", base_key="cheese pizza",
+                  variants=(frozenset({"CHEESE", "PIZZA"}),), head=None, diet="veg",
+                  proteins=frozenset(), is_combo=False)
+    g = pipeline._Group("cheese-pizza", q)
+    r = pipeline.DishResult(row=1, sku="TC-001", name="Cheese Pizza", category="Pizza", description="", price=299)
+    pipeline._apply_pick(r, options[0])
+    r.alternates = options[1:]
+    g.rows = [r]
+    return g
+
+
+def _run_photo_group(env, g, brand_words=frozenset()) -> pipeline._Run:
+    run = pipeline._Run(env.engine(), JobOptions(vendor="Test Cafe", live_search=False),
+                         env.tmp / "job1", None, env.events.append, lambda: None, None, {})
+    run.brand_guard = BrandGuard(brand_words)
+    (env.tmp / "job1" / "images").mkdir(parents=True, exist_ok=True)
+    run._photo_group(g)
+    return run
+
+
+def test_tune3_tc3_branded_best_falls_back_to_clean_alternate(tmp_path):
+    env = Env(tmp_path)
+    branded_url = preset_image(env, "cheese-branded", branded_jpeg("ZOMATO"))
+    clean_url = preset_image(env, "cheese-clean", noise_jpeg(9))
+    g = _photo_group_fixture([_photo_option(branded_url, "res-a"), _photo_option(clean_url, "res-b")])
+
+    _run_photo_group(env, g)
+
+    r = g.rows[0]
+    assert r.zomato_img == clean_url
+    assert r.local_image == "images/TC-001.jpg"
+    assert (env.tmp / "job1" / r.local_image).is_file()
+    assert any(e.get("message") == "Skipped a photo showing zomato for Cheese Pizza" for e in env.events)
+
+
+def test_tune3_tc4_all_branded_needs_photo(tmp_path):
+    env = Env(tmp_path)
+    b1 = preset_image(env, "branded-1", branded_jpeg("ZOMATO", seed=1))
+    b2 = preset_image(env, "branded-2", branded_jpeg("ZOMATO", seed=2))
+    g = _photo_group_fixture([_photo_option(b1, "res-a"), _photo_option(b2, "res-b")])
+
+    _run_photo_group(env, g)
+
+    r = g.rows[0]
+    assert r.local_image == ""
+    assert r.reason == "Only photos with zomato branding found — ask the owner for a photo"
+    pipeline._settle(r, True)
+    assert r.status == "needs_photo"
+
+
+def test_tune3_tc5_vendor_own_brand_kept(tmp_path):
+    env = Env(tmp_path)
+    branded_url = preset_image(env, "special-pinoz", branded_jpeg("Pino'z"))
+    env.pool("la-pinoz-0", [("Special Pizza", "Pizza", "veg", "special-pinoz")], res_name="La Pino'z Pizza")
+    for i in range(1, 5):
+        env.pool(f"la-pinoz-{i}", [("Other Dish", "Pizza", "veg", f"filler-{i}")], res_name="La Pino'z Pizza")
+    menu = env.menu([["Special Pizza", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="La Pino'z Pizza", live_search=False), upload=False)
+
+    r = env.results()["Special Pizza"]
+    assert r["source"] == "chain" and r["status"] == "ready" and r["zomato_img"] == branded_url
+
+
+def test_tune3_tc6_ocr_import_failure_disables_guard(tmp_path, monkeypatch):
+    class BrokenRapidOCR:
+        def __init__(self, *a, **kw):
+            raise RuntimeError("models unavailable")
+
+    broken = type(sys)("rapidocr")
+    broken.RapidOCR = BrokenRapidOCR
+    monkeypatch.setitem(sys.modules, "rapidocr", broken)
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199]])
+
+    summary = env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    assert summary["ready"] == 1
+    res = env.results()["Cheese Pizza"]
+    assert res["status"] == "ready" and res["zomato_img"]

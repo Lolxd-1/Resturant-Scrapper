@@ -21,6 +21,7 @@ import numpy as np
 from rapidfuzz import fuzz
 
 from studio import imaging, sheets
+from studio.brand import BrandGuard, brand_words_from_pool
 from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, models_dir, pool_db_path
 from studio.hosting import UploadError, Uploader
 from studio.lexicon import HEAD_CUISINES, HEAD_GROUP
@@ -721,6 +722,9 @@ class _Run:
 
     def photos(self) -> None:
         self.stage("photos")
+        counts = _chain_sizes(self.engine.store.all_items())
+        vendor_tokens = brand_words_from_pool({self.vendor_key: 1}, min_outlets=0)
+        self.brand_guard = BrandGuard(brand_words_from_pool(counts) - vendor_tokens)
         (self.job_dir / "images").mkdir(exist_ok=True)
         for i, g in enumerate(self.groups):
             self.check()
@@ -746,12 +750,18 @@ class _Run:
                     "restaurant_url": first.restaurant_url, "zomato_img": first.zomato_img,
                     "tier": first.tier, "confidence": first.confidence, "source": first.source}] \
             + first.alternates
+        branded = ""
         for opt in options:
             got = imaging.fetch_full(opt["zomato_img"], self.engine.http)
             if got is None:
                 self.engine.store.mark_bad_image(opt["zomato_img"], "download failed")
                 continue
             jpeg, (w, h) = got
+            hit = self.brand_guard.brands_in(jpeg)
+            if hit:
+                branded = sorted(hit)[0]
+                self.say(f"Skipped a photo showing {branded} for {first.name}")
+                continue
             for r in g.rows:
                 if opt is not options[0]:
                     _apply_pick(r, opt)
@@ -761,7 +771,8 @@ class _Run:
                 (self.job_dir / r.local_image).write_bytes(jpeg)
             return
         for r in g.rows:
-            r.reason = "Photo download failed"
+            r.reason = (f"Only photos with {branded} branding found — ask the owner for a photo"
+                        if branded else "Photo download failed")
 
     def upload(self) -> None:
         if not self.opts.upload:
