@@ -39,7 +39,7 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] EVAL — 305/330 (92.4%) coverage, 1 wrong + 2 borderline of 305 (99.7% precision); evidence .orchestrator/reports/eval.md
 - [x] FIX1 Swap/rebuild concurrency, honest downloads — done 002d647..d8cd1fc (gate PASS)
 - [x] FIX2 Robustness — done 11bdfc0..b45cc29 (gate PASS; resumed twice after maxTurns)
-- [~] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — deps FIX2
+- [x] FIX3 Close gate, logo-check visibility, VC++ runtime, chain rule, swap brand check, pin uv — done bf47bec..9708583 (gate PASS; CLOSE_AGREE_MIN 0.82 calibrated)
 - [ ] FINAL verify-all, final review, FIX1, push prodv2.0
 
 ## Open questions

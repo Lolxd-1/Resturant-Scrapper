@@ -42,3 +42,4 @@
 - 2026-09-27T14:58:44Z EVAL done: 305/330 covered, 1 wrong, 2 borderline (evidence reports/eval.md).
 - 2026-09-27T15:03:40Z FIX1 PASS. dispatch FIX2 (sonnet). LPP-008 residual added to FIX3 Notes.
 - 2026-09-27T15:30:18Z FIX2 PASS. dispatch FIX3 (opus)
+- 2026-09-27T15:46:23Z FIX3 PASS. Orchestrator XS fix: UI pill shows vision-off warning (FIX3 concern). Next: final rereview (sonnet) of review findings, then push.
