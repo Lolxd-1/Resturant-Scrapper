@@ -146,6 +146,15 @@ def test_consensus_single_item_returns_ones():
     assert list(result) == [1.0]
 
 
+
+def test_fix3_raw_agreement_is_best_cosine_to_another_photo():
+    vecs = np.array([[1.0, 0.0], [0.6, 0.8], [0.0, 1.0]], dtype=np.float32)
+
+    result = vision.raw_agreement(vecs)
+
+    assert result == pytest.approx([0.6, 0.8, 0.8])
+    assert list(vision.raw_agreement(vecs[:1])) == [0.0]
+
 # ---- text_sim (part of the vision contract, exercised with FakeVision) ----
 
 def test_text_sim_maps_matching_and_orthogonal(fake_vision):

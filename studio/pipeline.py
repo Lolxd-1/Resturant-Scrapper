@@ -39,6 +39,7 @@ from studio.models import (
 from studio.store import PoolStore
 from studio.text import normalize, parse_dish, size_base_key
 from studio.vision import (
+    CLOSE_AGREE_MIN,
     FOOD_MIN_PROB,
     HEAD_HARD_VETO,
     HEAD_SOFT_VETO,
@@ -47,6 +48,7 @@ from studio.vision import (
     food_prob,
     head_margin,
     load_vision,
+    raw_agreement,
     text_sim,
 )
 from studio.zomato import CITIES, DEFAULT_SEARCH_CITIES, Http, ZomatoBlocked, ZomatoClient, chain_key
@@ -728,7 +730,10 @@ class _Run:
             cons = consensus(mat, np.array([c.score.text for c in survivors]))
             ts = text_sim(vision, mat, g.q.display)
             for j, c in enumerate(survivors):
-                c.food_ok, c.type_ok = bool(food[j] >= FOOD_MIN_PROB), bool(keep_head[j])
+                # The vendor's own/chain menu names this exact dish, so only a clear mismatch vetoes it.
+                own_menu = c.source in ("own", "chain")
+                c.food_ok = bool(food[j] >= FOOD_MIN_PROB)
+                c.type_ok = bool(margins[j] >= HEAD_HARD_VETO if own_menu else keep_head[j])
                 c.consensus, c.vision = float(cons[j]), float(ts[j])
                 if not (c.food_ok and c.type_ok):
                     continue
@@ -742,7 +747,15 @@ class _Run:
             kept = survivors
         keep_close = (self.opts.strictness != "strict" and vision.available
                       and not any(c.score.tier in ("exact", "strong") for c in kept))
-        kept = [c for c in kept if c.score.tier != "close" or (keep_close and c.consensus >= 0.5)]
+        gated = []
+        for c in kept:
+            if c.score.tier == "close" and c.source not in ("own", "chain"):
+                others = [vecs[o.item.img_url] for o in kept if o.item.res_url != c.item.res_url]
+                if not (keep_close and others and raw_agreement(
+                        np.stack([vecs[c.item.img_url], *others]))[0] >= CLOSE_AGREE_MIN):
+                    continue
+            gated.append(c)
+        kept = gated
         kept.sort(key=lambda c: (_TIER_RANK[c.score.tier], -c.final))
 
         if not kept:

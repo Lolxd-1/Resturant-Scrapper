@@ -469,7 +469,7 @@ def _candidate(res: str, url: str, tier: str) -> Candidate:
 
 
 def _run_verify_group(env, cands: list[Candidate], head=None, monkeypatch=None,
-                       food=None, margin=None):
+                       food=None, margin=None, rows=None):
     engine = env.engine()
     for c in cands:
         vec = np.zeros(512, dtype=np.float32)
@@ -483,6 +483,7 @@ def _run_verify_group(env, cands: list[Candidate], head=None, monkeypatch=None,
                   head=head, diet="veg", proteins=frozenset(), is_combo=False)
     g = pipeline._Group("dish", q)
     g.cands = cands
+    g.rows = rows or []
     run = pipeline._Run(engine, JobOptions(vendor="Test Cafe", live_search=False),
                          env.tmp / "job1", None, lambda e: None, lambda: None, None, {})
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -529,6 +530,58 @@ def test_tune1_tc4_close_tier_soft_veto_applies(tmp_path, monkeypatch):
     _run_verify_group(env, [close], monkeypatch=monkeypatch, food=[0.9], margin=[-0.03])
 
     assert close.type_ok is False
+
+
+def _verify_row() -> pipeline.DishResult:
+    return pipeline.DishResult(row=1, sku="TC-001", name="Dish", category="Cat", description="", price=100)
+
+
+def test_fix3_tc1_lone_close_candidate_needs_photo(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    row = _verify_row()
+    _run_verify_group(env, [_candidate("r1", "https://img/close.jpg", "close")], monkeypatch=monkeypatch,
+                       food=[0.9], margin=[0.05], rows=[row])
+
+    assert row.zomato_img == ""
+    assert row.reason == "Only uncertain matches found (best: Dish @ r1)"
+
+
+def test_fix3_tc2_close_candidate_with_agreeing_photo_from_other_restaurant_kept(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    row = _verify_row()
+    _run_verify_group(env, [_candidate("r1", "https://img/close1.jpg", "close"),
+                            _candidate("r2", "https://img/close2.jpg", "close")],
+                       monkeypatch=monkeypatch, food=[0.9, 0.9], margin=[0.05, 0.05], rows=[row])
+
+    assert row.zomato_img in ("https://img/close1.jpg", "https://img/close2.jpg")
+    assert row.tier == "close"
+
+
+def test_fix3_close_candidates_from_same_restaurant_do_not_agree(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    row = _verify_row()
+    first, second = _candidate("r1", "https://img/a.jpg", "close"), _candidate("r1", "https://img/b.jpg", "close")
+    _run_verify_group(env, [first, second], monkeypatch=monkeypatch,
+                       food=[0.9, 0.9], margin=[0.05, 0.05], rows=[row])
+
+    assert row.zomato_img == ""
+
+
+def test_fix3_lpp008_chain_menu_match_bypasses_close_gate_and_soft_veto(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    row = _verify_row()
+    chain = _candidate("la-pinoz", "https://img/pack.jpg", "close")
+    chain.source = "chain"
+    _run_verify_group(env, [chain], monkeypatch=monkeypatch, food=[0.9], margin=[-0.05], rows=[row])
+
+    assert row.zomato_img == "https://img/pack.jpg" and row.source == "chain"
+
+    vetoed_row = _verify_row()
+    vetoed = _candidate("la-pinoz", "https://img/wrong.jpg", "close")
+    vetoed.source = "chain"
+    _run_verify_group(env, [vetoed], monkeypatch=monkeypatch, food=[0.9], margin=[-0.12], rows=[vetoed_row])
+
+    assert vetoed_row.zomato_img == ""
 
 
 def test_tune1_tc5_food_prob_010_rejected_every_tier(tmp_path, monkeypatch):

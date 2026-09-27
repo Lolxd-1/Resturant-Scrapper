@@ -42,6 +42,9 @@ NONFOOD_PROMPTS: list[str] = [
 FOOD_MIN_PROB = 0.30
 HEAD_HARD_VETO = -0.10
 HEAD_SOFT_VETO = -0.02
+# Measured on 6 eval jobs: same-dish photo pairs p20 = 0.811, different-dish pairs p90 = 0.838.
+# The two overlap, so this is their midpoint.
+CLOSE_AGREE_MIN = 0.82
 
 
 class Vision(Protocol):
@@ -202,6 +205,16 @@ def consensus(img_vecs: np.ndarray, weights: np.ndarray) -> np.ndarray:
     if hi - lo < 1e-12:
         return np.full(n, 0.5, dtype=np.float64)
     return (raw - lo) / (hi - lo)
+
+
+def raw_agreement(img_vecs: np.ndarray) -> np.ndarray:
+    """For each photo, its highest cosine to any other photo (0.0 when it is alone)."""
+    n = len(img_vecs)
+    if n <= 1:
+        return np.zeros(n, dtype=np.float64)
+    cos = (img_vecs @ img_vecs.T).astype(np.float64)
+    np.fill_diagonal(cos, -np.inf)
+    return cos.max(axis=1)
 
 
 def text_sim(vision: Vision, img_vecs: np.ndarray, text: str) -> np.ndarray:
