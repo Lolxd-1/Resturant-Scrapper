@@ -12,7 +12,8 @@ S1 in flight (opus). Then S2, DATA2 (Maharashtra-deep crawl), EVAL2 (Gavkari + 6
 tests: 286 passed. Hotel Gavkari (user's run, latest build): 111/215 ready (52%). Baseline live run here: scratchpad/live_out3/Hotel_Gavkari_before.txt (running).
 
 ## Tasks
-- [~] S1 Spelling/script normalization + pipeline integration — attempt=1
+- [x] S1 Spelling/script normalization — done 10c1c09..1997a2e (gate PASS after 1 ruling)
+- [~] S1B Protect local words from phonetic correction (kanduri->kandhari, mith->meetha, नग->naga found by audit) — attempt=1
 - [ ] S2 Word-driven discovery + locality crawl — deps S1
 - [ ] DATA2 Maharashtra-deep seed crawl — deps S2
 - [ ] EVAL2 Gavkari + 6-menu regression, audit — deps DATA2
