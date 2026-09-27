@@ -1,0 +1,393 @@
+"""Offline end-to-end tests for studio.pipeline (FakeSession HTTP, tmp pool, fake vision, fake ImgBB)."""
+from __future__ import annotations
+
+import io
+import json
+import threading
+import zlib
+
+import numpy as np
+import openpyxl
+import pytest
+from PIL import Image
+
+from studio import pipeline
+from studio.hosting import Uploader
+from studio.imaging import THUMB_SUFFIX
+from studio.models import ImgbbKey, PoolItem, RestaurantMenu
+from studio.pipeline import NO_KEY_MESSAGE, Engine, JobOptions, list_jobs, load_job, run_job
+from studio.sheets import safe_vendor
+from studio.store import PoolStore
+from studio.vision import FOOD_PROMPTS, NullVision
+from studio.zomato import Http
+from tests.conftest import FakeResponse, FakeSession, make_xlsx
+from tests.fixtures.zomato.make_pages import item, menu_state, search_state, state_html, suggest_json
+from tests.test_sheets import make_template
+
+IMG = "https://b.zmtcdn.com/data/dish/"
+SUGGEST = "https://www.zomato.com/webroutes/search/autoSuggest"
+HEADER = ["Item Name", "Category", "Description", "Price"]
+
+
+class FoodVision:
+    """Every image embeds to the "food on a plate" prompt; texts get distinct one-hot vectors."""
+
+    available = True
+    reason = ""
+
+    def __init__(self):
+        self._index: dict[str, int] = {}
+
+    def embed_texts(self, texts):
+        vecs = np.zeros((len(texts), 512), dtype=np.float32)
+        for row, t in enumerate(texts):
+            vecs[row, self._index.setdefault(t, len(self._index))] = 1.0
+        return vecs
+
+    def embed_images(self, images):
+        return np.repeat(self.embed_texts([FOOD_PROMPTS[0]]), len(images), axis=0)
+
+
+def noise_jpeg(seed: int) -> bytes:
+    blocks = np.random.default_rng(seed).integers(0, 256, (6, 6, 3), dtype=np.uint8)
+    buf = io.BytesIO()
+    Image.fromarray(blocks).resize((420, 420), Image.NEAREST).save(buf, format="JPEG", quality=80)
+    return buf.getvalue()
+
+
+class Env:
+    def __init__(self, tmp_path, vision=None):
+        self.tmp = tmp_path
+        self.session = FakeSession()
+        self.http = Http(session=self.session, min_interval=0.0, sleep=lambda s: None)
+        self.store = PoolStore(tmp_path / "pool.sqlite")
+        self.vision = vision or FoodVision()
+        self.posts: list[dict] = []
+        self.uploader = Uploader([ImgbbKey("t", "k" * 32)], http_post=self.post, store=self.store)
+        self.events: list[dict] = []
+
+    def post(self, url, data=None, files=None, timeout=None):
+        self.posts.append(data)
+        n = len(self.posts)
+        body = {"success": True, "data": {"url": f"https://i.ibb.co/{n}/x.jpg",
+                                          "display_url": f"https://i.ibb.co/{n}/x.jpg"}}
+        return FakeResponse(200, json.dumps(body))
+
+    def image(self, name: str) -> str:
+        url = IMG + name + ".jpg"
+        if url not in self.session.routes:
+            self.session.add(url, FakeResponse(200, content=noise_jpeg(zlib.crc32(name.encode()))))
+        return url
+
+    def pool(self, slug: str, dishes, city: str = "pune", res_name: str | None = None) -> None:
+        """dishes: (name, category, diet, image name)."""
+        url = f"https://www.zomato.com/{city}/{slug}"
+        name = res_name or slug.replace("-", " ").title()
+        items = [PoolItem(0, n, cat, "Delivery", "", diet, self.image(img), slug, name, url, city, "")
+                 for n, cat, diet, img in dishes]
+        self.store.upsert_menu(RestaurantMenu(slug, name, url, city, "", items))
+
+    def page(self, slug: str, dishes, city: str = "pune", res_name: str | None = None) -> None:
+        """A live Zomato restaurant page (not in the pool)."""
+        url = f"https://www.zomato.com/{city}/{slug}"
+        cats: dict[str, list] = {}
+        for n, cat, diet, img in dishes:
+            cats.setdefault(cat, []).append(item(n, self.image(img), diet))
+        state = menu_state(slug, res_name or slug.replace("-", " ").title(), url,
+                           [("Delivery", list(cats.items()))])
+        self.session.add(url + "/order", FakeResponse(200, state_html(state)))
+
+    def engine(self) -> Engine:
+        return Engine(self.store, self.vision, self.http)
+
+    def menu(self, rows, header=HEADER, name="menu.xlsx"):
+        return make_xlsx(self.tmp / name, [header, *rows])
+
+    def run(self, menu_path, opts, job="job1", engine=None, upload=True, **kw):
+        opts.upload = upload
+        kw.setdefault("uploader", self.uploader if upload else None)
+        kw.setdefault("on_event", self.events.append)
+        return run_job(engine or self.engine(), menu_path, self.tmp / job, opts, **kw)
+
+    def results(self, job="job1") -> dict[str, dict]:
+        data = json.loads((self.tmp / job / "results.json").read_text(encoding="utf-8"))
+        return {r["name"]: r for r in data}
+
+
+@pytest.fixture(autouse=True)
+def small_template(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "TEMPLATE_PATH", make_template(tmp_path / "template.xlsx"))
+
+
+def sheet(env, vendor, kind, job="job1"):
+    return openpyxl.load_workbook(env.tmp / job / f"{safe_vendor(vendor)}_SmartBiz_{kind}.xlsx")["bulk_upload_template"]
+
+
+def col(ws, letter, n):
+    return [ws[f"{letter}{r}"].value for r in range(2, n + 2)]
+
+
+# ---- TC1: end to end with a seeded pool ----
+
+def test_end_to_end_ready_pending_images(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizzas", "veg", "cheese1"),
+                             ("Farmhouse Pizza", "Pizzas", "veg", "farm1"),
+                             ("Cold Coffee", "Beverages", "veg", "cc1"),
+                             ("Mango Shake", "Shakes", "veg", "mango1")])
+    env.pool("cafe-two", [("Cheese Pizza", "Pizza", "veg", "cheese2"),
+                          ("Cold Coffee", "Drinks", "veg", "cc2")])
+    menu = env.menu([
+        ["Cheese Pizza - Small", "Pizza", "", 199],
+        ["Cheese Pizza - Large", "Pizza", "", 399],
+        ["Farmhouse Pizza", "Pizza", "", 299],
+        ["Cold Coffee", "Beverages", "", 120],
+        ["Mango Shake", "Beverages", "Thick mango shake", None],
+        ["Ceet-B Mastani", "Beverages", "", 90],
+    ])
+    summary = env.run(menu, JobOptions(vendor="Test Cafe", live_search=False))
+
+    assert summary["total"] == 6 and summary["ready"] == 4 and summary["needs_price"] == 1
+    ready = sheet(env, "Test Cafe", "UPLOAD_READY")
+    assert col(ready, "D", 5) == ["Cheese Pizza - Small", "Cheese Pizza - Large", "Farmhouse Pizza",
+                                  "Cold Coffee", None]
+    assert col(ready, "H", 4) == ["Pizza", "Pizza", "Pizza", "Beverages"]
+    assert all(u and u.startswith("https://i.ibb.co/") for u in col(ready, "P", 4))
+    pending = sheet(env, "Test Cafe", "PENDING")
+    assert col(pending, "D", 2) == ["Mango Shake", "Ceet-B Mastani"]
+    assert pending["P2"].value.startswith("https://i.ibb.co/")
+
+    res = env.results()
+    small, large = res["Cheese Pizza - Small"], res["Cheese Pizza - Large"]
+    assert small["zomato_img"] and small["zomato_img"] == large["zomato_img"]
+    assert small["hosted_url"] == large["hosted_url"]
+    for r in res.values():
+        if r["local_image"]:
+            assert (tmp_path / "job1" / r["local_image"]).is_file()
+    assert (tmp_path / "job1" / "images" / "TC-001.jpg").is_file()
+    assert res["Ceet-B Mastani"]["status"] == "needs_photo"
+    assert res["Ceet-B Mastani"]["reason"] == "Not found on Zomato"
+    job = load_job(tmp_path / "job1")
+    assert job["status"] == "done" and job["summary"]["ready"] == 4 and job["menu_file"] == "menu.xlsx"
+    assert list_jobs(tmp_path)[0]["id"] == "job1"
+    assert any(e["type"] == "done" for e in env.events)
+
+
+# ---- TC2: vendor is a chain on Zomato ----
+
+def test_chain_mode_uses_chain_photos(tmp_path):
+    env = Env(tmp_path)
+    env.pool("other-place", [("Farmhouse Pizza", "Pizza", "veg", "farm-other"),
+                             ("Cold Coffee", "Drinks", "veg", "cc-other")])
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json(
+        [{"entityType": "chain_outlets", "actionInfo": {"clickUrl": "/pune/brands/pizzaco"}}])))
+    env.session.add("https://www.zomato.com/pune/brands/pizzaco", FakeResponse(200, state_html(
+        search_state(["/pune/pizzaco-baner/order", "/pune/pizzaco-kothrud/order"]))))
+    env.page("pizzaco-baner", [("Farmhouse Pizza", "Pizza", "veg", "farm-chain1")], res_name="PizzaCo")
+    env.page("pizzaco-kothrud", [("Farmhouse Pizza", "Pizza", "veg", "farm-chain2")], res_name="PizzaCo")
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299], ["Cold Coffee", "Beverages", "", 120]])
+
+    env.run(menu, JobOptions(vendor="PizzaCo", live_search=False), upload=False)
+
+    res = env.results()
+    assert res["Farmhouse Pizza"]["source"] == "chain"
+    assert res["Farmhouse Pizza"]["zomato_img"] in (IMG + "farm-chain1.jpg", IMG + "farm-chain2.jpg")
+    assert res["Cold Coffee"]["source"] == "pool"
+    assert res["Farmhouse Pizza"]["status"] == "ready"
+    assert any("found on Zomato as chain" in e.get("message", "") for e in env.events)
+
+
+# ---- TC3: user-supplied own Zomato URL ----
+
+def test_own_restaurant_url(tmp_path):
+    env = Env(tmp_path)
+    env.pool("other-place", [("Farmhouse Pizza", "Pizza", "veg", "farm-other")])
+    env.page("my-own-cafe", [("Farmhouse Pizza", "Pizza", "veg", "farm-own")])
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="My Own Cafe", zomato_url="https://www.zomato.com/pune/my-own-cafe/order",
+                             live_search=False), upload=False)
+
+    r = env.results()["Farmhouse Pizza"]
+    assert r["source"] == "own" and r["zomato_img"] == IMG + "farm-own.jpg" and r["status"] == "ready"
+    assert not any("autoSuggest" in url for url, _ in env.session.calls)
+
+
+# ---- TC4: live whole-Zomato search across cities, persisted in the pool ----
+
+def test_live_search_multi_city_and_persist(tmp_path):
+    env = Env(tmp_path)
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    env.session.add("https://www.zomato.com/mumbai/restaurants/pizza",
+                    FakeResponse(200, '<a href="/mumbai/tasty-slice/order">Tasty Slice</a>'))
+    env.page("tasty-slice", [("Farmhouse Pizza", "Pizza", "veg", "farm-live")], city="mumbai")
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="Tiny Cafe", city="pune"), upload=False)
+
+    r = env.results()["Farmhouse Pizza"]
+    assert r["status"] == "ready" and r["source"] == "live"
+    assert env.store.menu_fetched_at("https://www.zomato.com/mumbai/tasty-slice") is not None
+    assert any(url.startswith("https://www.zomato.com/pune/restaurants/") for url, _ in env.session.calls)
+
+    before = len(env.session.calls)
+    env.run(menu, JobOptions(vendor="Tiny Cafe", city="pune"), job="job2", upload=False)
+    assert env.results("job2")["Farmhouse Pizza"]["status"] == "ready"
+    assert not any(url.endswith("/order") for url, _ in env.session.calls[before:])
+
+
+# ---- TC5: Zomato blocks every request ----
+
+def test_blocked_continues(tmp_path):
+    env = Env(tmp_path)
+    env.session.add("https://www.zomato.com", FakeResponse(403, "forbidden"))
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299], ["Cold Coffee", "Beverages", "", 120]])
+
+    summary = env.run(menu, JobOptions(vendor="Some Cafe", city="pune"), upload=False)
+
+    assert load_job(tmp_path / "job1")["status"] == "done"
+    assert summary["needs_photo"] == 2
+    assert all(r["status"] == "needs_photo" for r in env.results().values())
+    assert any(e["type"] == "log" and "limiting requests" in e["message"] for e in env.events)
+
+
+# ---- TC6: text-only mode when the vision model is unavailable ----
+
+def test_text_only_mode(tmp_path):
+    env = Env(tmp_path, vision=NullVision("offline"))
+    env.pool("north-place", [("Paneer Butter", "Main Course", "veg", "pb1"),
+                             ("Cheese Pizza", "Pizza", "veg", "cheese1")])
+    env.pool("filler-place", [(f"{w} Sandwich", "Sandwiches", "veg", f"sw-{w}")
+                              for w in ("Club", "Grilled", "Bombay", "Corn", "Aloo", "Mayo")])
+    menu = env.menu([["Paneer Butter Masala", "Main Course", "", 250], ["Cheese Pizza", "Pizza", "", 199]])
+
+    summary = env.run(menu, JobOptions(vendor="Some Cafe", live_search=False), upload=False)
+
+    res = env.results()
+    assert res["Paneer Butter Masala"]["status"] == "needs_photo"
+    assert res["Paneer Butter Masala"]["reason"].startswith("Only uncertain matches")
+    assert res["Cheese Pizza"]["status"] == "ready"
+    assert summary["vision"] is False
+
+
+# ---- TC7: resume does not re-download or re-upload finished dishes ----
+
+def test_resume_skips_uploaded(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Cold Coffee", "Drinks", "veg", "cc1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199], ["Cold Coffee", "Beverages", "", 120]])
+    opts = JobOptions(vendor="Test Cafe", live_search=False)
+    env.run(menu, opts)
+    first = env.results()
+    assert len(env.posts) == 2
+
+    before = len(env.session.calls)
+    summary = env.run(menu, opts)
+
+    assert len(env.posts) == 2
+    assert not any(url.startswith(IMG) and not url.endswith(THUMB_SUFFIX) for url, _ in env.session.calls[before:])
+    assert summary["ready"] == 2
+    assert {k: v["hosted_url"] for k, v in env.results().items()} == {k: v["hosted_url"] for k, v in first.items()}
+
+
+# ---- TC8: two dishes never share one photo when an alternative exists ----
+
+def test_distinct_images(tmp_path):
+    env = Env(tmp_path)
+    env.pool("place-a", [("Margherita Pizza", "Pizza", "veg", "shared"), ("Farmhouse Pizza", "Pizza", "veg", "shared")])
+    env.pool("place-b", [("Spicy Margherita Pizza", "Pizza", "veg", "marg-b")])
+    env.pool("place-c", [("Spicy Farmhouse Pizza", "Pizza", "veg", "farm-c")])
+    menu = env.menu([["Margherita Pizza", "Pizza", "", 199], ["Farmhouse Pizza", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    res = env.results()
+    assert res["Margherita Pizza"]["zomato_img"] == IMG + "shared.jpg"
+    assert res["Farmhouse Pizza"]["zomato_img"] == IMG + "farm-c.jpg"
+
+
+# ---- TC9: unicode menu ----
+
+def test_unicode_menu_end_to_end(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1")])
+    menu = env.menu([["पनीर टिक्का", "Main Course", "घर का स्वाद", 220],
+                     ["Cheese Pizza", "Pizza", "Loaded with cheese ₹ 199 😋", 199]])
+
+    env.run(menu, JobOptions(vendor="Café Désí", live_search=False))
+
+    assert load_job(tmp_path / "job1")["status"] == "done"
+    res = env.results()
+    assert res["पनीर टिक्का"]["status"] == "needs_photo"
+    assert res["पनीर टिक्का"]["reason"] == "Name is not in English letters — add an English name"
+    assert res["Cheese Pizza"]["status"] == "ready"
+    for kind in ("UPLOAD_READY", "PENDING"):
+        sheet(env, "Café Désí", kind)
+    openpyxl.load_workbook(tmp_path / "job1" / f"{safe_vendor('Café Désí')}_Photo_Report.xlsx")
+    assert sheet(env, "Café Désí", "UPLOAD_READY")["I2"].value == "Loaded with cheese ₹ 199 😋"
+
+
+# ---- TC10: no ImgBB keys saved ----
+
+def test_no_keys_marks_photo_rows_error(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Cold Coffee", "Drinks", "veg", "cc1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199], ["Cold Coffee", "Beverages", "", 120],
+                     ["Ceet-B Mastani", "Beverages", "", 90]])
+
+    summary = env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), uploader=None)
+
+    res = env.results()
+    for name in ("Cheese Pizza", "Cold Coffee"):
+        assert res[name]["status"] == "error" and res[name]["reason"] == NO_KEY_MESSAGE
+    assert res["Ceet-B Mastani"]["status"] == "needs_photo"
+    assert summary["errors"] == 2
+    assert all((tmp_path / "job1" / f).is_file() for f in summary["files"].values())
+
+
+# ---- TC11: cancel mid-run ----
+
+def test_cancel_after_first_dish(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Cold Coffee", "Drinks", "veg", "cc1"),
+                             ("Farmhouse Pizza", "Pizza", "veg", "farm1")])
+    menu = env.menu([["Cheese Pizza", "Pizza", "", 199], ["Cold Coffee", "Beverages", "", 120],
+                     ["Farmhouse Pizza", "Pizza", "", 299]])
+    cancel = threading.Event()
+
+    def on_event(ev):
+        env.events.append(ev)
+        if ev["type"] == "dish":
+            cancel.set()
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), on_event=on_event, cancel=cancel)
+
+    assert load_job(tmp_path / "job1")["status"] == "cancelled"
+    assert (tmp_path / "job1" / "results.json").is_file()
+    assert len(env.posts) == 1
+    assert not any(e["type"] == "done" for e in env.events)
+
+
+# ---- TC12: menu without categories gets inferred ones ----
+
+def test_blank_categories_inferred(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Cold Coffee", "Drinks", "veg", "cc1")])
+    menu = env.menu([["Cheese Pizza", 199], ["Cold Coffee", 120]], header=["Item Name", "Price"])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    assert col(sheet(env, "Test Cafe", "UPLOAD_READY"), "H", 2) == ["Pizza", "Beverages"]
+
+
+# ---- TC13: a veg dish never takes a non-veg photo ----
+
+def test_veg_dish_never_gets_nonveg_photo(tmp_path):
+    env = Env(tmp_path)
+    env.pool("momo-place", [("Momos", "Momos", "nonveg", "momo-nv"), ("Chicken Momos", "Momos", "nonveg", "cmomo")])
+    menu = env.menu([["Veg Momos", "Momos", "", 120]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    r = env.results()["Veg Momos"]
+    assert r["status"] == "needs_photo" and r["zomato_img"] == ""
