@@ -28,8 +28,8 @@ Before any change: no tests exist (pytest collects 0 -> exit 4/5); v1 code has n
 - [x] T10 Pipeline engine — o11 — done d304e0f..b80ac80 (gate PASS; 3 defects -> T10F)
 - [x] T10F Fix sheet clear, per-restaurant load, blocked reset — done 0653912..274a102 (gate PASS)
 - [x] T10B Photo swap + CLI — o12 — done c7f9f59..7c343f7 (gate PASS)
-- [~] T11 Server + app.py — o13 — attempt=1
-- [ ] T12 Web UI — o14 — deps T11
+- [x] T11 Server + app.py — o13 — done 644ba65..378cb7f (gate PASS; test_server slow 111 s -> FIX queue)
+- [~] T12 Web UI — o14 — attempt=1
 - [ ] T13 Launcher + README — o15 — deps T11
 - [ ] T15 Eval tool — o16 — deps T10B
 - [ ] EVAL Live eval + audit + tuning (orchestrator) — deps T15 DATA1

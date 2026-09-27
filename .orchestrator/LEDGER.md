@@ -28,3 +28,4 @@
 - 2026-09-27T10:27:52Z T10 PASS with concerns; created T10F (sheets clear bug = correctness, store per-restaurant load = perf, blocked reset). dispatch T10F (sonnet)
 - 2026-09-27T10:36:52Z T10F PASS. dispatch T10B (sonnet). Orchestrator starts first live dry run (Shivraj) outside the repo.
 - 2026-09-27T10:47:02Z T10B PASS. Live dry run Shivraj: 16/18 ready, 16/16 visually correct, 150 s. Extracted _combine_scores (4ed3ca4) with TODO(human) for the user. dispatch T11 (sonnet)
+- 2026-09-27T11:06:12Z T11 PASS. FIX-QUEUE: tests/test_server.py takes 111 s. dispatch T12 (opus)
