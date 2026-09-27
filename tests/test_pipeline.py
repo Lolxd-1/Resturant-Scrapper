@@ -5,6 +5,8 @@ import io
 import json
 import threading
 import zlib
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import openpyxl
@@ -14,7 +16,7 @@ from PIL import Image
 from studio import pipeline
 from studio.hosting import Uploader
 from studio.imaging import THUMB_SUFFIX
-from studio.models import ImgbbKey, PoolItem, RestaurantMenu
+from studio.models import Candidate, DishQuery, ImgbbKey, MatchScore, PoolItem, RestaurantMenu
 from studio.pipeline import NO_KEY_MESSAGE, Engine, JobOptions, list_jobs, load_job, run_job
 from studio.sheets import safe_vendor
 from studio.store import PoolStore
@@ -417,3 +419,82 @@ def test_veg_dish_never_gets_nonveg_photo(tmp_path):
 
     r = env.results()["Veg Momos"]
     assert r["status"] == "needs_photo" and r["zomato_img"] == ""
+
+
+# ---- TUNE1: calibrated vision veto (food_prob / head_margin) ----
+
+def _candidate(res: str, url: str, tier: str) -> Candidate:
+    item = PoolItem(0, "Dish", "Cat", "Delivery", "", "veg", url, res, res,
+                     f"https://www.zomato.com/pune/{res}", "pune", res)
+    return Candidate(item=item, score=MatchScore(tier=tier, text=0.9))
+
+
+def _run_verify_group(env, cands: list[Candidate], head=None, monkeypatch=None,
+                       food=None, margin=None):
+    engine = env.engine()
+    for c in cands:
+        vec = np.zeros(512, dtype=np.float32)
+        vec[0] = 1.0
+        engine.store.put_embedding(c.item.img_url, vec)
+    if food is not None:
+        monkeypatch.setattr(pipeline, "food_prob", lambda vision, mat: np.array(food))
+    if margin is not None:
+        monkeypatch.setattr(pipeline, "head_margin", lambda vision, mat, head: np.array(margin))
+    q = DishQuery(raw="Dish", display="Dish", base_key="dish", variants=(frozenset({"DISH"}),),
+                  head=head, diet="veg", proteins=frozenset(), is_combo=False)
+    g = pipeline._Group("dish", q)
+    g.cands = cands
+    run = pipeline._Run(engine, JobOptions(vendor="Test Cafe", live_search=False),
+                         env.tmp / "job1", None, lambda e: None, lambda: None, None, {})
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        run._verify_group(g, pool, Counter())
+    return cands
+
+
+def test_tune1_tc1_food_prob_040_kept(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    cands = [_candidate("r1", "https://img/1.jpg", "exact")]
+    _run_verify_group(env, cands, monkeypatch=monkeypatch, food=[0.40], margin=[np.inf])
+
+    assert cands[0].food_ok is True and cands[0].type_ok is True
+
+
+def test_tune1_tc2_head_margin_hard_veto(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+
+    kept = _candidate("r1", "https://img/kept.jpg", "exact")
+    _run_verify_group(env, [kept], monkeypatch=monkeypatch, food=[0.9], margin=[-0.05])
+    assert kept.type_ok is True
+
+    rejected = _candidate("r2", "https://img/rejected.jpg", "exact")
+    _run_verify_group(env, [rejected], monkeypatch=monkeypatch, food=[0.9], margin=[-0.12])
+    assert rejected.type_ok is False
+
+
+def test_tune1_tc3_soft_veto_removes_outlier_only(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    good = _candidate("r1", "https://img/good.jpg", "exact")
+    outlier = _candidate("r2", "https://img/outlier.jpg", "exact")
+
+    _run_verify_group(env, [good, outlier], monkeypatch=monkeypatch,
+                       food=[0.9, 0.9], margin=[0.03, -0.05])
+
+    assert good.type_ok is True
+    assert outlier.type_ok is False
+
+
+def test_tune1_tc4_close_tier_soft_veto_applies(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    close = _candidate("r1", "https://img/close.jpg", "close")
+
+    _run_verify_group(env, [close], monkeypatch=monkeypatch, food=[0.9], margin=[-0.03])
+
+    assert close.type_ok is False
+
+
+def test_tune1_tc5_food_prob_010_rejected_every_tier(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    for tier in ("exact", "strong", "close"):
+        cand = _candidate("r1", f"https://img/{tier}.jpg", tier)
+        _run_verify_group(env, [cand], monkeypatch=monkeypatch, food=[0.10], margin=[np.inf])
+        assert cand.food_ok is False

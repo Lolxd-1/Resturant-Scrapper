@@ -86,6 +86,17 @@ def test_tc4_food_ok_logo_false_food_true(fake_vision):
     assert list(result) == [False, True]
 
 
+# ---- TUNE1: FOOD_MIN_PROB threshold (0.30, not the old 0.5) ----
+
+def test_tune1_food_ok_uses_lowered_threshold(fake_vision):
+    food_bytes = fake_vision.image_bytes_for("a photo of food on a plate")
+    img_vecs = fake_vision.embed_images([food_bytes])
+    probs = vision.food_prob(fake_vision, img_vecs)
+
+    assert bool(vision.food_ok(fake_vision, img_vecs)[0]) is True
+    assert probs[0] > vision.FOOD_MIN_PROB
+
+
 # ---- TC5: head_ok ----
 
 def test_tc5_head_ok_pizza_vs_other_group(fake_vision):
@@ -95,6 +106,25 @@ def test_tc5_head_ok_pizza_vs_other_group(fake_vision):
     assert vision.head_ok(fake_vision, img_vecs, "DAL")[0] == np.bool_(False)
     assert vision.head_ok(fake_vision, img_vecs, "PIZZA")[0] == np.bool_(True)
     assert vision.head_ok(fake_vision, img_vecs, None)[0] == np.bool_(True)
+
+
+# ---- TUNE1: head_margin raw signal ----
+
+def test_tune1_head_margin_inf_when_head_unknown(fake_vision):
+    bytes_ = fake_vision.image_bytes_for(HEAD_PROMPT["PIZZA"])
+    img_vecs = fake_vision.embed_images([bytes_])
+
+    assert vision.head_margin(fake_vision, img_vecs, None)[0] == np.inf
+    assert vision.head_margin(fake_vision, img_vecs, "not-a-head")[0] == np.inf
+
+
+def test_tune1_head_margin_matches_head_ok_threshold(fake_vision):
+    pizza_bytes = fake_vision.image_bytes_for(HEAD_PROMPT["PIZZA"])
+    img_vecs = fake_vision.embed_images([pizza_bytes])
+
+    margin = vision.head_margin(fake_vision, img_vecs, "PIZZA")[0]
+    assert margin == pytest.approx(1.0)
+    assert bool(vision.head_ok(fake_vision, img_vecs, "PIZZA")[0]) is bool(margin >= vision.HEAD_SOFT_VETO)
 
 
 # ---- TC6: consensus ----

@@ -39,7 +39,9 @@ NONFOOD_PROMPTS: list[str] = [
     "a collage of many different dishes",
 ]
 
-_HEAD_VETO_MARGIN = 0.02
+FOOD_MIN_PROB = 0.30
+HEAD_HARD_VETO = -0.10
+HEAD_SOFT_VETO = -0.02
 
 
 class Vision(Protocol):
@@ -134,20 +136,23 @@ def load_vision(cache_dir: Path, allow_download: bool = True) -> Vision:
         return NullVision(reason=str(exc)[:200])
 
 
-def food_ok(vision: Vision, img_vecs: np.ndarray) -> np.ndarray:
+def food_prob(vision: Vision, img_vecs: np.ndarray) -> np.ndarray:
     prompts = FOOD_PROMPTS + NONFOOD_PROMPTS
     text_vecs = vision.embed_texts(prompts)
     logits = 100.0 * (img_vecs @ text_vecs.T)
     exp = np.exp(logits - logits.max(axis=1, keepdims=True))
     probs = exp / exp.sum(axis=1, keepdims=True)
-    food_prob = probs[:, : len(FOOD_PROMPTS)].sum(axis=1)
-    return food_prob >= 0.5
+    return probs[:, : len(FOOD_PROMPTS)].sum(axis=1)
 
 
-def head_ok(vision: Vision, img_vecs: np.ndarray, head: str | None) -> np.ndarray:
+def food_ok(vision: Vision, img_vecs: np.ndarray) -> np.ndarray:
+    return food_prob(vision, img_vecs) >= FOOD_MIN_PROB
+
+
+def head_margin(vision: Vision, img_vecs: np.ndarray, head: str | None) -> np.ndarray:
     n = len(img_vecs)
     if head is None or head not in HEAD_PROMPT:
-        return np.ones(n, dtype=bool)
+        return np.full(n, np.inf, dtype=np.float64)
 
     groups_order: list[str] = []
     representative: dict[str, str] = {}
@@ -162,7 +167,7 @@ def head_ok(vision: Vision, img_vecs: np.ndarray, head: str | None) -> np.ndarra
 
     other_groups = [g for g in groups_order if g != own_group]
     if not other_groups:
-        return np.ones(n, dtype=bool)
+        return np.full(n, np.inf, dtype=np.float64)
 
     texts = list(dict.fromkeys([own_prompt] + [group_prompt[g] for g in other_groups]))
     text_vecs = vision.embed_texts(texts)
@@ -171,7 +176,11 @@ def head_ok(vision: Vision, img_vecs: np.ndarray, head: str | None) -> np.ndarra
     sims = img_vecs @ text_vecs.T
     own = sims[:, text_idx[own_prompt]]
     best_other = sims[:, [text_idx[group_prompt[g]] for g in other_groups]].max(axis=1)
-    return own >= best_other - _HEAD_VETO_MARGIN
+    return own - best_other
+
+
+def head_ok(vision: Vision, img_vecs: np.ndarray, head: str | None) -> np.ndarray:
+    return head_margin(vision, img_vecs, head) >= HEAD_SOFT_VETO
 
 
 def consensus(img_vecs: np.ndarray, weights: np.ndarray) -> np.ndarray:

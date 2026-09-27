@@ -38,7 +38,17 @@ from studio.models import (
 )
 from studio.store import PoolStore
 from studio.text import normalize, parse_dish, size_base_key
-from studio.vision import Vision, consensus, food_ok, head_ok, load_vision, text_sim
+from studio.vision import (
+    FOOD_MIN_PROB,
+    HEAD_HARD_VETO,
+    HEAD_SOFT_VETO,
+    Vision,
+    consensus,
+    food_prob,
+    head_margin,
+    load_vision,
+    text_sim,
+)
 from studio.zomato import CITIES, DEFAULT_SEARCH_CITIES, Http, ZomatoBlocked, ZomatoClient, chain_key
 
 log = logging.getLogger("studio.pipeline")
@@ -164,6 +174,26 @@ def _write_json(path: Path, data) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     os.replace(tmp, path)
+
+
+def _head_keep(margins: np.ndarray, tiers: list[str]) -> list[bool]:
+    """Final head-check keep decision (see TUNE1): hard veto always applies; the soft
+    veto only removes outliers among several candidates of the same or better tier,
+    or a lone "close" tier candidate.
+    """
+    soft_ok = margins >= HEAD_SOFT_VETO
+    keep = []
+    for i, tier in enumerate(tiers):
+        if margins[i] < HEAD_HARD_VETO:
+            keep.append(False)
+            continue
+        others_ok = any(soft_ok[j] for j in range(len(tiers))
+                        if j != i and _TIER_RANK[tiers[j]] <= _TIER_RANK[tier])
+        if tier == "close" or others_ok:
+            keep.append(bool(soft_ok[i]))
+        else:
+            keep.append(True)
+    return keep
 
 
 def _combine_scores(c: Candidate, big_brand: bool) -> float:
@@ -632,12 +662,13 @@ class _Run:
         kept: list[Candidate] = []
         if vision.available and survivors:
             mat = np.stack([vecs[c.item.img_url] for c in survivors])
-            food = food_ok(vision, mat)
-            head = head_ok(vision, mat, g.q.head)
+            food = food_prob(vision, mat)
+            margins = head_margin(vision, mat, g.q.head)
+            keep_head = _head_keep(margins, [c.score.tier for c in survivors])
             cons = consensus(mat, np.array([c.score.text for c in survivors]))
             ts = text_sim(vision, mat, g.q.display)
             for j, c in enumerate(survivors):
-                c.food_ok, c.type_ok = bool(food[j]), bool(head[j])
+                c.food_ok, c.type_ok = bool(food[j] >= FOOD_MIN_PROB), bool(keep_head[j])
                 c.consensus, c.vision = float(cons[j]), float(ts[j])
                 if not (c.food_ok and c.type_ok):
                     continue
