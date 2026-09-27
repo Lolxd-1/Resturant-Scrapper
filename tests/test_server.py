@@ -234,6 +234,31 @@ def test_validation_404_and_400(tmp_path):
 
 # ---- TC7 ----
 
+# ---- FIX2 TC6 ----
+
+def test_fix2_tc6_zomato_url_validation(tmp_path):
+    app, *_ = make_app(tmp_path)
+    client = TestClient(app)
+    _disable_live_search(client)
+
+    r = upload_menu(client, tmp_path, [["Cheese Pizza", "Pizza", "", 199]])
+    upload_id = r.json()["upload_id"]
+
+    bad = client.post("/api/jobs", json={
+        "upload_id": upload_id, "vendor": "Test Cafe", "city": "pune", "zomato_url": "zoma.to/abc",
+    })
+    assert bad.status_code == 400
+    assert "full zomato.com address" in bad.json()["detail"]
+
+    r2 = upload_menu(client, tmp_path, [["Cheese Pizza", "Pizza", "", 199]], name="menu2.xlsx")
+    upload_id2 = r2.json()["upload_id"]
+    good = client.post("/api/jobs", json={
+        "upload_id": upload_id2, "vendor": "Test Cafe", "city": "pune",
+        "zomato_url": "www.zomato.com/pune/x",
+    })
+    assert good.status_code == 200
+
+
 def test_choose_null_marks_needs_photo(tmp_path):
     app, *_ = make_app(tmp_path)
     client = TestClient(app)

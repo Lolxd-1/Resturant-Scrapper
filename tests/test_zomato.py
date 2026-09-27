@@ -275,3 +275,14 @@ def test_tc13_canonical_helpers():
     canonical = canonical_res_url("/pune/Abc-Def/order?x=1")
     assert canonical == "https://www.zomato.com/pune/abc-def"
     assert city_of(canonical) == "pune"
+
+
+# ---- FIX2 TC1: unexpected requests exceptions (e.g. TooManyRedirects) exhaust retries, no crash ----
+
+def test_fix2_tc1_too_many_redirects_returns_none():
+    fake_session = FakeSession()
+    url = "https://www.zomato.com/pune/redirecty/order"
+    fake_session.add(url, requests.TooManyRedirects("boom"))
+    http = make_http(fake_session, max_retries=2)
+    assert http.get(url) is None
+    assert len(fake_session.calls) == 3

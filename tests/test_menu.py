@@ -126,6 +126,19 @@ def test_tc5_category_inheritance(tmp_path):
     assert [r.category for r in result.rows] == ["South Indian", "South Indian", "South Indian"]
 
 
+def test_fix2_tc5_category_column_beats_type_column(tmp_path):
+    rows = [
+        ["Item Name", "Type", "Category", "Price"],
+        ["Paneer Tikka", "Veg", "Starters", 220],
+        ["Chicken Wings", "Non-Veg", "Starters", 260],
+    ]
+    path = make_xlsx(tmp_path / "menu.xlsx", rows)
+    result = read_menu(path)
+    assert result.errors == []
+    assert result.columns["category"] == 2
+    assert [r.category for r in result.rows] == ["Starters", "Starters"]
+
+
 def test_tc6_duplicate_names(tmp_path):
     rows = [
         ["Item Name", "Category", "Description", "Price"],

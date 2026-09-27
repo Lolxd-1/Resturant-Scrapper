@@ -6,7 +6,9 @@ import io
 import numpy as np
 from PIL import Image
 
-from studio.imaging import THUMB_SUFFIX, fetch_full, fetch_thumb, sha256
+import requests
+
+from studio.imaging import THUMB_SUFFIX, fetch_full, fetch_full_ex, fetch_thumb, sha256
 from studio.zomato import Http
 from tests.conftest import FakeResponse
 
@@ -107,6 +109,23 @@ def test_tc2_fetch_full_strips_query_and_never_raises_on_404(fake_session):
     http = make_http(fake_session)
     assert fetch_full("https://b.zmtcdn.com/missing.jpg?x=1", http) is None
     assert fetch_full("https://b.zmtcdn.com/missing.jpg", http) is None
+
+
+# ---- FIX2 TC3: fetch_full_ex distinguishes network failure from a definitive 404 ----
+
+def test_fix2_tc3_fetch_full_ex_network_failure(fake_session):
+    http = make_http(fake_session, max_retries=1)
+    fake_session.add("https://b.zmtcdn.com/flaky.jpg", requests.ConnectionError("boom"))
+    result, reason = fetch_full_ex("https://b.zmtcdn.com/flaky.jpg", http)
+    assert result is None
+    assert reason == "network"
+
+
+def test_fix2_tc3_fetch_full_ex_404_is_http(fake_session):
+    http = make_http(fake_session)
+    result, reason = fetch_full_ex("https://b.zmtcdn.com/missing.jpg", http)
+    assert result is None
+    assert reason == "http"
 
 
 # ---- TC7: sha256 of b"abc" equals the known hex digest ----

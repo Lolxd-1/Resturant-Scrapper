@@ -135,6 +135,12 @@ class Http:
         self.sleep(min(30, 2 ** attempt) + 0.1 * attempt)
 
     def get(self, url: str, params: dict | None = None) -> requests.Response | None:
+        resp, _ = self.get_ex(url, params)
+        return resp
+
+    def get_ex(self, url: str, params: dict | None = None) -> tuple[requests.Response | None, str]:
+        """Like get(), but also reports why a None came back: "network" (connection/timeout/
+        retries exhausted) or "http" (a definitive non-200 such as 404/410)."""
         host = urlsplit(url).netloc
         is_html_page = "zomato.com" in host and "/webroutes/" not in url
         attempts = self.max_retries + 1
@@ -146,7 +152,7 @@ class Http:
             except requests.RequestException as exc:
                 if attempt == attempts:
                     log.warning("zomato request failed: %s (%s)", url, exc)
-                    return None
+                    return None, "network"
                 self._backoff(attempt)
                 continue
 
@@ -162,9 +168,9 @@ class Http:
                         raise ZomatoBlocked(url)
                     self._backoff(attempt, resp)
                     continue
-                return resp
+                return resp, ""
             if status in (404, 410):
-                return None
+                return None, "http"
             if status == 403:
                 if attempt == attempts:
                     raise ZomatoBlocked(url)
@@ -173,11 +179,11 @@ class Http:
             if status in _RETRYABLE_STATUSES:
                 if attempt == attempts:
                     log.warning("zomato request failed: %s (status %s)", url, status)
-                    return None
+                    return None, "network"
                 self._backoff(attempt, resp)
                 continue
-            return None
-        return None
+            return None, "http"
+        return None, "network"
 
 
 def parse_state(html: str) -> dict | None:

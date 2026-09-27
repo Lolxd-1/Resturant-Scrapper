@@ -164,6 +164,17 @@ def test_tc6_bad_images(tmp_path):
     store.close()
 
 
+# ---- FIX2 TC3: is_bad_image ignores marks whose reason starts with "network" (defensive, old DBs) ----
+
+def test_fix2_tc3_is_bad_image_ignores_network_reason(tmp_path):
+    store = PoolStore(tmp_path / "pool.db")
+    store.mark_bad_image("https://b.zmtcdn.com/flaky.jpg", "network")
+    assert store.is_bad_image("https://b.zmtcdn.com/flaky.jpg") is False
+    store.mark_bad_image("https://b.zmtcdn.com/gone.jpg", "download failed")
+    assert store.is_bad_image("https://b.zmtcdn.com/gone.jpg") is True
+    store.close()
+
+
 # ---- TC7: unicode round-trip ----
 
 def test_tc7_unicode_roundtrip(tmp_path):

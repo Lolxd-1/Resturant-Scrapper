@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from studio import pipeline
 from studio.brand import BrandGuard
+from studio.config import atomic_write_text
 from studio.hosting import Uploader
 from studio.imaging import THUMB_SUFFIX
 from studio.models import Candidate, DishQuery, ImgbbKey, MatchScore, PoolItem, RestaurantMenu
@@ -272,6 +273,23 @@ def test_blocked_continues(tmp_path):
     assert summary["needs_photo"] == 2
     assert all(r["status"] == "needs_photo" for r in env.results().values())
     assert any(e["type"] == "log" and "limiting requests" in e["message"] for e in env.events)
+
+
+# ---- FIX2 TC2: an unexpected discovery exception (e.g. suggest raising ValueError) never aborts the job ----
+
+def test_fix2_tc2_suggest_value_error_still_finishes_done(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    engine = env.engine()
+
+    def boom(*args, **kwargs):
+        raise ValueError("bad json shape")
+
+    monkeypatch.setattr(engine.client, "suggest", boom)
+    menu = env.menu([["Farmhouse Pizza", "Pizza", "", 299]])
+
+    env.run(menu, JobOptions(vendor="Some Cafe", city="pune", live_search=False), engine=engine, upload=False)
+
+    assert load_job(tmp_path / "job1")["status"] == "done"
 
 
 # ---- TC5b: a block from one job does not disable live search forever ----
@@ -612,6 +630,44 @@ def test_tune3_tc5_vendor_own_brand_kept(tmp_path):
     assert r["source"] == "chain" and r["status"] == "ready" and r["zomato_img"] == branded_url
 
 
+def test_fix2_tc4_fallback_never_reuses_another_dishs_photo(tmp_path):
+    env = Env(tmp_path)
+    used_url = preset_image(env, "used-elsewhere", noise_jpeg(11))
+    alt_url = preset_image(env, "clean-alt", noise_jpeg(12))
+    # best_url is never registered with the fake session, so its download fails (404 -> "http").
+    best_url = IMG + "missing-best.jpg"
+
+    q = DishQuery(raw="Cheese Pizza", display="Cheese Pizza", base_key="cheese pizza",
+                  variants=(frozenset({"CHEESE", "PIZZA"}),), head=None, diet="veg",
+                  proteins=frozenset(), is_combo=False)
+
+    g_used = pipeline._Group("other-dish", q)
+    r_used = pipeline.DishResult(row=1, sku="TC-001", name="Other Dish", category="Pizza", description="", price=299)
+    pipeline._apply_pick(r_used, _photo_option(used_url, "res-b"))
+    r_used.alternates = []
+    g_used.rows = [r_used]
+
+    g_fallback = pipeline._Group("cheese-pizza", q)
+    r_fb = pipeline.DishResult(row=2, sku="TC-002", name="Cheese Pizza", category="Pizza", description="", price=299)
+    pipeline._apply_pick(r_fb, _photo_option(best_url, "res-a"))
+    r_fb.alternates = [_photo_option(used_url, "res-b"), _photo_option(alt_url, "res-c")]
+    g_fallback.rows = [r_fb]
+
+    run = pipeline._Run(env.engine(), JobOptions(vendor="Test Cafe", live_search=False),
+                         env.tmp / "job1", None, env.events.append, lambda: None, None, {})
+    run.brand_guard = BrandGuard(frozenset())
+    (env.tmp / "job1" / "images").mkdir(parents=True, exist_ok=True)
+    # Mimics what the verify stage records for its best pick before photos() ever runs.
+    run.used_images[used_url] = g_used.key
+
+    run._photo_group(g_used)
+    run._photo_group(g_fallback)
+
+    assert g_used.rows[0].zomato_img == used_url
+    assert g_fallback.rows[0].zomato_img == alt_url
+    assert g_fallback.rows[0].zomato_img != g_used.rows[0].zomato_img
+
+
 def test_tune3_tc6_ocr_import_failure_disables_guard(tmp_path, monkeypatch):
     class BrokenRapidOCR:
         def __init__(self, *a, **kw):
@@ -677,3 +733,25 @@ def test_fix1_tc5_low_disk_keeps_menu_and_resumes(tmp_path, monkeypatch):
     assert job["status"] == "done"
     assert job["created"] == created
     assert summary["total"] == 1
+
+
+# ---- FIX2 TC7: atomic_write_text survives transient PermissionError (OneDrive/antivirus lock) ----
+
+def test_fix2_tc7_atomic_write_text_retries_permission_error(tmp_path, monkeypatch):
+    path = tmp_path / "job.json"
+    import os as os_mod
+
+    attempts = {"n": 0}
+    real_replace = os_mod.replace
+
+    def flaky_replace(src, dst):
+        attempts["n"] += 1
+        if attempts["n"] <= 2:
+            raise PermissionError(13, "Permission denied", str(dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os_mod, "replace", flaky_replace)
+    atomic_write_text(path, "hello")
+
+    assert attempts["n"] == 3
+    assert path.read_text(encoding="utf-8") == "hello"

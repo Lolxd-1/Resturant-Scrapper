@@ -24,20 +24,18 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _safe_get(url: str, http: Http):
+def _safe_get_ex(url: str, http: Http) -> tuple[object | None, str]:
     try:
-        return http.get(url)
+        return http.get_ex(url)
     except Exception as exc:
         log.debug("imaging: request failed for %s: %s", url, exc)
-        return None
+        return None, "network"
 
 
 def fetch_thumb_ex(url: str, http: Http) -> tuple[bytes | None, str]:
-    resp = _safe_get(url.split("?", 1)[0] + THUMB_SUFFIX, http)
+    resp, reason = _safe_get_ex(url.split("?", 1)[0] + THUMB_SUFFIX, http)
     if resp is None:
-        return None, "network"
-    if resp.status_code != 200:
-        return None, "http"
+        return None, reason
     content = resp.content
     if content is None or len(content) < 1500:
         return None, "invalid"
@@ -70,11 +68,9 @@ def validate_photo(img: Image.Image) -> str | None:
 def fetch_full_ex(
     url: str, http: Http, min_side: int = 400, max_side: int = 1600
 ) -> tuple[tuple[bytes, tuple[int, int]] | None, str]:
-    resp = _safe_get(url.split("?", 1)[0], http)
+    resp, reason = _safe_get_ex(url.split("?", 1)[0], http)
     if resp is None:
-        return None, "network"
-    if resp.status_code != 200:
-        return None, "http"
+        return None, reason
     content = resp.content
     try:
         img = Image.open(io.BytesIO(content))
