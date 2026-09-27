@@ -1,0 +1,46 @@
+# LEDGER (append-only, one line per event)
+<!-- format: - <UTC time> <event>. Rulings: "Ruling: <decision> — <why> — <cost if wrong>" -->
+- 2026-09-27T06:49:44Z init run=menu-photo-v2 branch=prodv2.0 base=040e68b
+- 2026-09-27T08:10Z Ruling: run autonomously without the approval pause — user said "Get it done ... push this to the github. that's it." — cost if wrong: user sees the plan only at the end.
+- 2026-09-27T08:10Z Ruling: sequential execution only (no worktree waves) — Windows symlinked .venv unreliable; shared hot files — cost if wrong: longer wall clock.
+- 2026-09-27T08:10Z Ruling: drop freeimage.host fallback — public key returns "Internal upload error" (code 111) for multipart, base64 and URL uploads — cost if wrong: one fewer fallback host; multi-key ImgBB rotation covers the ask.
+- 2026-09-27T08:10Z Ruling: vision = CLIP ViT-B/32 as verifier only (measured fine top1 0.27, coarse 0.72) — cost if wrong: re-tune weights in EVAL.
+- 2026-09-27T08:10Z Ruling: push to new branch prodv2.0 (repo convention prodv1.0); PR/merge to main left to user.
+- 2026-09-27T08:10Z Ruling: Streamlit removed; FastAPI + vanilla SPA — needed for Apple-grade UI and background jobs — cost if wrong: no hosted Streamlit URL (user said local PC use).
+- 2026-09-27T07:38:42Z dispatch T01 (sonnet)
+- 2026-09-27T07:38:56Z Ruling: orch-executor/orch-reviewer not registered in this session (kit installed mid-session) — dispatch general-purpose with an explicit model and the instruction to follow .claude/agents/orch-executor.md (or orch-reviewer.md) verbatim — cost if wrong: executor has extra tools; the gate still enforces scope.
+- 2026-09-27T07:44:26Z T01 gate PASS 5a87e7e..5f6ff1e. Vision bench: nomic-Q fine top1 0.23 (worse), jina-clip failed to load under cp1252 locale (tokenizer json read) -> keep CLIP; PYTHONUTF8=1 required in launcher. User supplied an ImgBB key mid-run; stored in git-ignored config/settings.json as 'Team key 1'.
+- 2026-09-27T07:44:44Z dispatch T04 (sonnet)
+- 2026-09-27T07:59:32Z Ruling: removed '!tests/fixtures/**' from .gitignore (my T01 brief defect: un-ignored __pycache__) — fixtures are generated in code — cost if wrong: none. T04 TC12 threshold 180->140 accepted (144 real restaurants with photos; 20,459 items matches recon).
+- 2026-09-27T07:59:56Z T04 PASS (ruled). dispatch T05 (sonnet)
+- 2026-09-27T08:03:39Z T05 PASS. dispatch T14 (sonnet)
+- 2026-09-27T08:10:48Z T14 PASS. Starting DATA1 crawl in background.
+- 2026-09-27T08:11:04Z FIX-QUEUE: tools/*.py must be runnable as scripts (insert repo root on sys.path); README says python tools/build_seed_pool.py
+- 2026-09-27T08:11:48Z dispatch T02 (sonnet)
+- 2026-09-27T08:19:48Z T02 PASS. dispatch T03 (opus)
+- 2026-09-27T08:29:21Z T03 PASS (concern: diet precedence -> forwarded to T06 Notes). dispatch T06 (opus)
+- 2026-09-27T08:49:24Z T06 review CHANGES_REQUIRED (1 critical combo, 2 important) + orchestrator live-pool findings; fix round 1 -> resume T06 executor
+- 2026-09-27T08:55:16Z T06 PASS (round 1). Accepted concerns: CURRY_LIKE {CURRY,masala} counts as one match; 'kala' soft instead of KALAMASALA phrase. DATA1 committed 85fc73d. dispatch T07 (sonnet); T06 rereview in background pinned to e56b05d..3b6d625
+- 2026-09-27T09:04:59Z T06 rereview APPROVE. T07 PASS (CURRY->DAL in TC5). dispatch T08 (sonnet)
+- 2026-09-27T09:12:21Z T08 PASS. Ruling: live test (bad key disabled -> rotated to real key, upload OK, no key in states) replaces the sonnet task review — cost if wrong: a subtle rotation bug caught later in EVAL. dispatch T09 (sonnet)
+- 2026-09-27T09:24:39Z T09 NEEDS_CONTEXT (template load+save floor ~25-35 s). Ruling: TC8 <= 60 s, single template load reused; swaps rebuild sheets asynchronously (notes added to T10B, T11) — cost if wrong: slower job end by ~15 s.
+- 2026-09-27T09:27:44Z T09 PASS. dispatch T10 (opus)
+- 2026-09-27T10:27:52Z T10 PASS with concerns; created T10F (sheets clear bug = correctness, store per-restaurant load = perf, blocked reset). dispatch T10F (sonnet)
+- 2026-09-27T10:36:52Z T10F PASS. dispatch T10B (sonnet). Orchestrator starts first live dry run (Shivraj) outside the repo.
+- 2026-09-27T10:47:02Z T10B PASS. Live dry run Shivraj: 16/18 ready, 16/16 visually correct, 150 s. Extracted _combine_scores (4ed3ca4) with TODO(human) for the user. dispatch T11 (sonnet)
+- 2026-09-27T11:06:12Z T11 PASS. FIX-QUEUE: tests/test_server.py takes 111 s. dispatch T12 (opus)
+- 2026-09-27T11:35:48Z DISK FULL (477G drive at 100%) crashed Dominos eval; removed my own benchmark caches (3.5 GB). FIX-QUEUE: free-space check (warn < 1.5 GB at startup/job start, friendly error on OSError 28). T12 executor BLOCKED by CPU contention from my evals + denied Bash; it asked me to kill PID 19372 -> refused (not laundering a denied action), surfaced to user. Orchestrator re-verifies T12.
+- 2026-09-27T11:54:15Z Live evals + real job in app (18/18 uploaded). Findings -> TUNE1 (vision veto), TUNE2 (chain), TUNE3 (OCR brand guard: 2/278 zomato props), UIFIX. dispatch TUNE1 (sonnet)
+- 2026-09-27T12:02:43Z TUNE1 PASS. dispatch TUNE2 (opus)
+- 2026-09-27T12:06:22Z TUNE2 PASS (+ veg safety fix in same_dish_menu_match fuzzy fallback). dispatch TUNE3 (sonnet)
+- 2026-09-27T12:21:21Z TUNE3 PASS (executor hit maxTurns after committing code; report committed by checkpoint). dispatch UIFIX (sonnet)
+- 2026-09-27T12:37:09Z UIFIX PASS. Headless Edge min layout width is 496px (phone clipping was an artifact); true 390px verified via iframe. dispatch T13 (sonnet)
+- 2026-09-27T12:47:20Z Ruling: T13 Verify line 2 was a plan defect (bash expanded $e/$_ inside double quotes); single-quoted it. Fresh-PC sim: uv + Python 3.12 + 49 pkgs + SELF-TEST OK.
+- 2026-09-27T12:47:52Z T13 PASS. dispatch T15 (sonnet); orchestrator re-evaluates 6 menus in parallel (read-only)
+- 2026-09-27T12:52:22Z T15 PASS. All build tasks done; EVAL re-run in progress.
+- 2026-09-27T14:54:52Z Final review (opus) CHANGES_REQUIRED: 2 critical (swap races), 8 important, 11 minor. Ruling: split the single fix wave into FIX1/FIX2/FIX3 — executors repeatedly hit the 60-turn cap on large briefs — cost if wrong: 2 extra dispatches. Re-eval 305/330 (92.4%). dispatch FIX1 (opus)
+- 2026-09-27T14:58:44Z EVAL done: 305/330 covered, 1 wrong, 2 borderline (evidence reports/eval.md).
+- 2026-09-27T15:03:40Z FIX1 PASS. dispatch FIX2 (sonnet). LPP-008 residual added to FIX3 Notes.
+- 2026-09-27T15:30:18Z FIX2 PASS. dispatch FIX3 (opus)
+- 2026-09-27T15:46:23Z FIX3 PASS. Orchestrator XS fix: UI pill shows vision-off warning (FIX3 concern). Next: final rereview (sonnet) of review findings, then push.
+- 2026-09-27T16:09:34Z DONE: verify-all 286 passed; rereview APPROVE (3 unchecked items verified by orchestrator); key never in history. Pushing prodv2.0.
