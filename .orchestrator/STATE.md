@@ -2,7 +2,7 @@
 run: local-menus
 branch: prodv2.0
 run-base: 31bbe1c8b83d807d9a8d5ef00736de9903c58166
-status: executing
+status: done
 updated: 2026-09-27 · Claude Code / claude-opus-5-5
 
 ## NEXT ACTION
