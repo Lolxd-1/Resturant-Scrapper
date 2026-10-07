@@ -129,3 +129,28 @@ milestone B contracts are added to this file before B tasks are briefed.
 
 ## Rollback
 `git revert` the task commits on orch/photo-to-sheet; main is untouched.
+
+## Milestone B (Gemini free tier) — contracts
+```text
+studio/prompts.py (orchestrator-authored data): MENU_READER_SYSTEM, MENU_SCHEMA, manual_prompt() -> str,
+    ENRICH_SYSTEM, ENRICH_SCHEMA, JUDGE_SYSTEM, JUDGE_SCHEMA
+studio/gemini.py (B1): API_BASE, MODELS, GeminiError, GeminiQuotaError, text_part(), image_part(),
+    Gemini(api_key, *, cache_dir=None, models=MODELS, post, get, sleep, clock, min_interval=6.5)
+      .available .last_model .generate_json(system, parts, schema, *, high_res=False, max_output_tokens=65536) -> dict
+      .check_key() -> (bool, str)
+studio/models.py (B1): Settings.gemini_key: str = ""     studio/config.py (B1): ai_cache_dir() -> Path
+studio/reader.py (B2): IMAGE_EXTS, MAX_PHOTOS=8, MenuReadError, prepare_image(bytes)->bytes,
+    read_menu_images(gemini, images) -> (restaurant_name, items), write_extract(items, path) -> Path
+studio/pipeline.py (B3): Engine(..., swiggy=None, gemini=None); STAGE_LABELS["judge"]; enrich in read(); judge() stage
+studio/server.py (B4): settings gemini_set/gemini_tail + PUT gemini_key; POST /api/settings/test-gemini;
+    /api/menu/preview accepts photos; GET /api/uploads/{id}/extract; GET /api/prompt; FILE_KINDS "menu"
+```
+
+## Milestone B — Task DAG
+| ID | Title | Deps | Wave | Write-set | Risk | Model |
+|---|---|---|---|---|---|---|
+| B1 | Gemini REST client + Settings.gemini_key | A5 | 5 (with A6) | studio/gemini.py, studio/models.py, studio/config.py, tests/test_gemini.py, tests/test_config.py | high | sonnet |
+| B2 | Menu photo reader + CLI --menu-image | B1 | 6 | studio/reader.py, zomato_scrapper.py, tests/test_reader.py, tests/test_pipeline_cli.py | med | sonnet |
+| B3 | Pipeline enrich + AI photo judge | B1 A5 | 6 | studio/pipeline.py, tests/test_pipeline.py | high | opus |
+| B4 | Web: Gemini key, photo upload, website prompt | A6 B1 B2 B3 | 7 | studio/server.py, studio/web/app.js, studio/web/app.css, tests/test_server.py | med | sonnet |
+| EVAL | Live eval (Vithai photo, Food Junction, Hard_Pending) + audit + tuning | B4 + key | 8 | eval/ (ignored), small fix tasks as needed | - | orchestrator |
