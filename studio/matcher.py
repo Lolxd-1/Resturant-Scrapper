@@ -144,9 +144,11 @@ def _score_variant(q: DishQuery, v: frozenset[str], facts, ratio: float, idf, me
         return _reject("empty")
     v_heads = {HEADS[t] for t in v if t in HEADS}
     v_head = q.head if q.head in v_heads else None
+    # the dish type is known only from the menu category (or another alias), so an item of that same type is not a different dish
+    cat_head = q.head if q.head and q.head not in v_heads else None
     if v_head and i_head and v_head != i_head:
         return _reject("head")
-    if i_head and not v_head and i_head not in v_heads:
+    if i_head and not v_head and i_head not in v_heads and i_head != cat_head:
         return _reject(f"item is a {i_head}")
     if v_head and not i_head and v_head not in item_toks:
         return _reject("head missing")
@@ -154,7 +156,7 @@ def _score_variant(q: DishQuery, v: frozenset[str], facts, ratio: float, idf, me
     q_vis = {t for t in v if token_role(t) != "nonvisual"}
     i_vis = {t for t in item_toks if token_role(t) != "nonvisual"}
     missing = sorted(q_vis - i_vis)
-    extra = sorted(i_vis - q_vis)
+    extra = sorted(i_vis - q_vis - {cat_head})
     tier, reasons = "exact", []
     for t in missing:
         if token_role(t) != "soft":

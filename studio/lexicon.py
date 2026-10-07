@@ -80,7 +80,7 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "SHAKE": ("shake", "shakes", "thickshake", "milkshake", "milkshakes", "mastani"),
     "COFFEE": ("coffee",),
     "TEA": ("tea", "chai", "chaha", "chay"),
-    "MOJITO": ("mojito", "mojitos"),
+    "MOJITO": ("mojito", "mojitos", "mocktail", "mocktails"),
     "LASSI": ("lassi",),
     "BUTTERMILK": ("buttermilk", "taak", "tak", "chaas", "chhaas", "chaach", "chhach",
                    "mattha", "majjige"),

@@ -336,3 +336,18 @@ def test_perf_400k_index():
         times.append(time.perf_counter() - start)
         assert found and len(found) <= 600
     assert statistics.mean(times) < 0.05, statistics.mean(times)
+
+
+@pytest.mark.parametrize("dish, item_name, item_cat, diet, tiers", [
+    (("Tandoori Chicken", "Tandoori Kebabs"), "Tandoori Chicken", "Chicken Kebab", "nonveg", ("exact",)),
+    (("Tandoori Chicken", "Tandoori Kebabs"), "Tandoori Chicken", "", "nonveg", ("exact",)),
+    (("Tandoori Chicken", "Tandoori Kebabs"), "Tandoori Chicken Pizza", "Pizza", "nonveg", ("reject",)),
+    (("Paneer Tikka", "Starters"), "Paneer Tikka Pizza", "Pizza", "veg", ("reject",)),
+    (("Mango Mocktail", "Menu Item"), "Mango Mocktail", "Mocktails", "veg", ("exact",)),
+    (("Mango Mocktail", "Menu Item"), "Mango Mojito", "Mocktails", "veg", ("exact", "strong")),
+    (("Mango Mocktail", "Menu Item"), "Mango Lassi", "Beverages", "veg", ("reject",)),
+    (("Chicken Tikka", "Tandoori Kebabs"), "Chicken Tikka", "Kebabs", "nonveg", ("exact",)),
+])
+def test_category_head_and_mocktail(dish, item_name, item_cat, diet, tiers):
+    item = make_item(item_name, item_cat, diet)
+    assert score(parse_dish(*dish), item, PoolIndex([item]).idf).tier in tiers
