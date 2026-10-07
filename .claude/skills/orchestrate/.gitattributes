@@ -1,0 +1,2 @@
+# Scripts and parsed templates must keep LF endings on every OS.
+* text eol=lf

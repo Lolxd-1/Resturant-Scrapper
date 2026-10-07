@@ -1,0 +1,58 @@
+{
+  "skill_name": "orchestrate",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add per-user rate limiting to our Express API: 100 requests per minute per API key, return 429 with a Retry-After header, keep the counters in the Redis client we already use, and make sure the existing tests still pass.",
+      "expected_output": "A recon-backed plan in .orchestrator/ with testable acceptance criteria, frozen contracts, a pre-mortem, task briefs with write-sets and Verify blocks, then a short summary and a stop for approval before any code is written.",
+      "files": [],
+      "expectations": [
+        "Creates a feature branch and runs orch.sh init before planning",
+        "Runs orch.sh baseline and records the result in STATE.md",
+        "Dispatches orch-scout with model haiku rather than the built-in Explore or a fork",
+        "PLAN.md lists acceptance criteria for the 429 status, the Retry-After header, and the per-key limit",
+        "PLAN.md reuses the existing Redis client instead of planning a new one",
+        "Every brief has a Write-set, Test cases, and a fenced Verify block",
+        "Sets STATE status to awaiting-approval and shows the user at most 15 lines before dispatching any executor"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "resume",
+      "expected_output": "Follows the Resume protocol: reads state and git, gates in-progress tasks, never re-dispatches finished ones, and continues from NEXT ACTION.",
+      "files": [],
+      "expectations": [
+        "Runs orch.sh status and reads .orchestrator/STATE.md before doing anything else",
+        "Does not re-dispatch any task marked [x]",
+        "For each [~] task, finds BASE (task line or orch.sh base) and runs orch.sh gate before deciding to re-dispatch",
+        "A re-dispatch includes the line telling the executor to inspect partial work and not start over",
+        "Updates the updated: field with the current tool and model"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Use the orchestrate skill to fix the typo 'recieve' in the error message in src/errors.ts.",
+      "expected_output": "Sized as XS: the orchestrator makes the one-line fix itself, runs the relevant tests, and reports, without subagents or an .orchestrator/ directory.",
+      "files": [],
+      "expectations": [
+        "No subagent is dispatched",
+        "No .orchestrator/ directory is created",
+        "Only src/errors.ts changes (plus any test that asserts the message)",
+        "Relevant tests are run and their result is reported"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Orchestrate this, go as fast as you can, run everything in parallel: add three new REST endpoints (GET /reports, POST /reports, DELETE /reports/:id), each with tests.",
+      "expected_output": "Applies the parallel-safety checks instead of fanning out blindly: the shared route registry and shared types become an early serialized task, and parallel writers run only if every check passes, each in its own worktree.",
+      "files": [],
+      "expectations": [
+        "Reads references/parallelism.md before choosing a wave layout",
+        "Assigns the route registry (or equivalent hot file) to exactly one task",
+        "Shared request and response types are defined as a contract in PLAN before any fan-out",
+        "Any parallel dispatch uses isolation worktree, at most 3 agents, and a single dispatch checkpoint naming every task in the wave",
+        "Logs the parallel-or-sequential decision in LEDGER.md"
+      ]
+    }
+  ]
+}

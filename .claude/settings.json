@@ -1,0 +1,11 @@
+{
+  "worktree": {
+    "baseRef": "head"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/orchestrate/scripts/orch.sh *)",
+      "Bash(bash *.claude/skills/orchestrate/scripts/orch.sh *)"
+    ]
+  }
+}

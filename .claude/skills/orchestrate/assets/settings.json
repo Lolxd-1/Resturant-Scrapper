@@ -1,0 +1,12 @@
+{
+  "worktree": {
+    "baseRef": "head",
+    "symlinkDirectories": ["node_modules"]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(bash .claude/skills/orchestrate/scripts/orch.sh *)",
+      "Bash(bash *.claude/skills/orchestrate/scripts/orch.sh *)"
+    ]
+  }
+}
