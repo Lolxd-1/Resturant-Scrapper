@@ -1,23 +1,28 @@
 # ORCHESTRATOR STATE
-run: local-menus
-branch: prodv2.0
-run-base: 31bbe1c8b83d807d9a8d5ef00736de9903c58166
-status: done
-updated: 2026-09-27 · Claude Code / claude-opus-5-5
+<!-- Source of truth for this run. Any agent or tool resuming work reads this first. -->
+run: photo-to-sheet
+branch: orch/photo-to-sheet
+run-base: 34439a20083ef3a368a36ade389a5f6682c0907a
+status: executing
+updated: 2026-10-07T13:05:00Z · Claude Code / claude-opus-5-5
+<!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-S1 in flight (opus). Then S2, DATA2 (Maharashtra-deep crawl), EVAL2 (Gavkari + 6-menu regression + audit), push.
+Wave 1 (A1 A2 A3) dispatched in parallel worktrees. On return: gate each in its worktree, merge in ID order, verify, then brief A4.
+Milestone B (Gemini) waits for config/gemini_key.txt from the user; contracts for B go into PLAN before briefing.
 
 ## Baseline
-tests: 286 passed. Hotel Gavkari (user's run, latest build): 111/215 ready (52%). Baseline live run here: scratchpad/live_out3/Hotel_Gavkari_before.txt (running).
+tests: 383 passed, 2 skipped (101 s). Pending sheets evidence: shreee 141/228 ready (62%); hotel_shubham 44 pending; food_junction 81/89.
 
 ## Tasks
-- [x] S1 Spelling/script normalization — done 10c1c09..1997a2e (gate PASS after 1 ruling)
-- [x] S1B Protect local words — done 0bb2c52..738b1c8 (gate PASS; RED->GREEN on all 3)
-- [x] S2 Word-driven discovery + locality crawl — done c87a672..6505a8d (gate PASS)
-- [x] DATA2 seed +637 MH restaurants (2,954 / 167,574) — committed
-- [x] S3 Fix 4 wrong Gavkari picks — done 5b527eb..6925c81 (gate PASS ruled: scope hit = DATA2 seed file)
-- [~] EVAL2 Gavkari + 6-menu regression, audit — deps DATA2
+- [~] A1 Matcher rule fixes — w1 — mode=worktree
+- [~] A2 Diet + Photo Names columns — w1 — mode=worktree
+- [~] A3 Swiggy client + merge-insert + image URLs — w1 — mode=worktree
+- [ ] A4 Look-alike names + review status — w2 — deps A2
+- [ ] A5 Pipeline rungs/Swiggy/review — w3 — deps A1 A3 A4
+- [ ] A6 Review UI + endpoints — w4 — deps A5
+- [ ] B* Gemini milestone — deps A6 + user key
+- [ ] EVAL Eval set + audit — deps A6
 
 ## Open questions
-- none
+- Gemini key: asked user to save it to config/gemini_key.txt (2026-10-07).
