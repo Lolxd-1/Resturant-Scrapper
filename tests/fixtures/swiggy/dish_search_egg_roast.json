@@ -1,0 +1,253 @@
+{
+ "statusCode": 0,
+ "data": {
+  "cards": [
+   {
+    "groupedCard": {
+     "cardGroupMap": {
+      "DISH": {
+       "cards": [
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.gandalf.widgets.v2.SearchFilterSortWidget",
+           "sortConfigs": []
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "445978",
+             "name": "Alleppy Kerala Restaurant",
+             "city": "6",
+             "slugs": {
+              "restaurant": "alleppy-kerala-restaurant-kondhwa-kondhwa",
+              "city": "pune"
+             },
+             "areaName": "Kondhwa"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "79412564",
+              "name": "Appam Egg Roast 3pc",
+              "category": "Kappa Biryani",
+              "description": "A delightful combination of soft appam and savory egg roast, perfect for indulging in the flavors of Kappa Biryani.",
+              "price": 30000
+             }
+            },
+            {
+             "info": {
+              "id": "79412554",
+              "name": "Poth Roast",
+              "category": "Pothbeef",
+              "description": "A succulent non-Veg Poth dish that will leave you craving for more with its flavorsome preparation.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/6/28/5de89134-9b2c-4d98-9b99-7e5bdd6548e9_82cc1016-3942-4f50-abd8-14c6881a95d9.JPG",
+              "price": 35000
+             }
+            },
+            {
+             "info": {
+              "id": "79412552",
+              "name": "Chicken Boneless Pepper Roast",
+              "category": "Chicken Curry",
+              "description": "Delicious boneless chicken curry with a burst of flavorful pepper.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/7/1/397fbe2a-aa3d-4a8c-8f12-1cb6ccc5b874_c636b31f-57a3-4c79-9d1b-0a8c01e3108c.JPG",
+              "price": 36000
+             }
+            },
+            {
+             "info": {
+              "id": "79412551",
+              "name": "Chicken Pepper Roast",
+              "category": "Chicken Curry",
+              "description": "A delectable and flavorful chicken curry that will tantalize your taste buds with its delightful blend of spices.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/6/29/a7a0b00e-d189-4e0a-9a4a-a3b7a26d97ba_ed2397ed-5c84-4973-a9d6-cc286ec102e9.JPG",
+              "price": 36000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "434505",
+             "name": "Kerala Express",
+             "city": "6",
+             "slugs": {
+              "restaurant": "kerala-express-wanowrie-wanowrie",
+              "city": "pune"
+             },
+             "areaName": "Fatima Nagar"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "77856859",
+              "name": "Appam Egg Roast [3pc]",
+              "category": "Poth Items[Beef]",
+              "description": "A mouthwatering combination of fluffy appam and flavorful egg roast, perfect for a satisfying Kappa Biryani experience.",
+              "price": 36000
+             }
+            },
+            {
+             "info": {
+              "id": "77857020",
+              "name": "Chicken Boneless Pepper Roast",
+              "category": "Chicken Curry",
+              "description": "Juicy boneless chicken roast seasoned with aromatic peppers for an irresistible burst of flavor.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/8/27/28b6af43-6057-484c-975a-9fd8c5f726c5_5d6bafa0-c53b-4bd0-b910-ff076390ab74.JPG",
+              "price": 38000
+             }
+            },
+            {
+             "info": {
+              "id": "195019239",
+              "name": "Poth Roast [Beef]",
+              "category": "Poth Items[Beef]",
+              "isVeg": 1,
+              "price": 36000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "127657",
+             "name": "Vishal Restaurant",
+             "city": "6",
+             "slugs": {
+              "restaurant": "vishal-restaurant-fatima-nagar-wanowrie",
+              "city": "pune"
+             },
+             "areaName": "Wanowrie"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "33714475",
+              "name": "Egg Roast",
+              "category": "2 Egg",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/1/26/6d4fc1de-d946-476d-a4b8-32bf22757aca_14c7368c-7ccb-4069-a1ec-612d01daf057.JPG",
+              "price": 18000
+             }
+            },
+            {
+             "info": {
+              "id": "194920736",
+              "name": "Chicken Pepper Roast Bonles",
+              "category": "Chicken Special",
+              "price": 39000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "466619",
+             "name": "AK Chinese Corner",
+             "city": "6",
+             "slugs": {
+              "restaurant": "ak-chinese-corner-camp-camp",
+              "city": "pune"
+             },
+             "areaName": "Swargate"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "82081907",
+              "name": "Egg Roast",
+              "category": "Egg Gravy",
+              "description": "A succulent and flavorful concoction of tender eggs coated in a rich and savory gravy.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/1/26/822bff17-4c29-4412-b522-4d24c535ac3b_20be3de9-4cbb-42fc-98a0-71ba991f29e2.JPG",
+              "price": 13000
+             }
+            },
+            {
+             "info": {
+              "id": "82081925",
+              "name": "Chicken Roast [Full]",
+              "category": "Chicken Gravy",
+              "description": "Succulent and flavorful chicken in rich, savory gravy.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/1/18/ccd37adf-6a20-477d-898a-d88d284a0e4a_57ecd2b3-655e-46d9-81bc-458c6e3f7c21.jpg",
+              "price": 20000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "12431",
+             "name": "Agra Restaurant",
+             "city": "6",
+             "slugs": {
+              "restaurant": "agra-hotel-kondhwa",
+              "city": "pune"
+             },
+             "areaName": "Kondhwa"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "2255589",
+              "name": "Egg Roast",
+              "category": "Indian",
+              "description": "A delectable Indian specialty bursting with flavour, showcasing the perfect blend of succulent egg and a tantalizing array of spices.",
+              "price": 29000
+             }
+            },
+            {
+             "info": {
+              "id": "2255597",
+              "name": "Chicken Roast",
+              "category": "Indian",
+              "description": "A succulent Indian delight featuring tender roasted chicken bursting with exquisite flavors.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/1/19/aefb40b5-02e4-45cd-935b-edc767fbdec8_8d78ee14-7667-4712-9746-660c0524b2ee.JPG",
+              "price": 34900
+             }
+            }
+           ]
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  ]
+ }
+}

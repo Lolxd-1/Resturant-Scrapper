@@ -1,0 +1,477 @@
+{
+ "statusCode": 0,
+ "data": {
+  "cards": [
+   {
+    "groupedCard": {
+     "cardGroupMap": {
+      "DISH": {
+       "cards": [
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.gandalf.widgets.v2.SearchFilterSortWidget",
+           "sortConfigs": []
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "666003",
+             "name": "Banana leaf",
+             "city": "6",
+             "slugs": {
+              "restaurant": "banana-leaf-kalyani-nagar-kalyani-nagar",
+              "city": "pune"
+             },
+             "areaName": "Kalyani Nagar"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "164338065",
+              "name": "Mushroom Veg Oats Uttapam",
+              "category": "South Indian Specials",
+              "description": "Oats Uttapam Topped With Mushroom And Vegetable Mix.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/ec1c62e9-25a6-4aa5-95b4-0fa5ca58839b_f5e5222e-cd62-4755-b0c6-500c2213aefb.jpg_compressed",
+              "isVeg": 1,
+              "price": 31300
+             }
+            },
+            {
+             "info": {
+              "id": "164338070",
+              "name": "Tomato Onion Uttapam",
+              "category": "South Indian Specials",
+              "description": "Classic Uttapam Topped With A Mix Of Tomato And Onion.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2025/7/30/c13473be-6456-4c58-b1ce-656f3a1bb59b_9d91c78d-964e-433e-b4e1-57160d349997.jpg",
+              "isVeg": 1,
+              "price": 24300
+             }
+            },
+            {
+             "info": {
+              "id": "178214365",
+              "name": "Onion & Chilli Uttapam",
+              "category": "South Indian Specials",
+              "description": "Uttapam Topped With Onions And Green Chillies.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2025/7/30/193d9fe7-8f4e-4877-aa2c-dbccbecfe617_de29d97e-1725-4d01-bc83-2cb29eba7829.jpg",
+              "isVeg": 1,
+              "price": 22700
+             }
+            },
+            {
+             "info": {
+              "id": "164338095",
+              "name": "Nachni Uttapam (ragi)",
+              "category": "South Indian Specials",
+              "description": "Nutritious Ragi-Based Uttapam With Traditional Spices.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2025/8/10/d492db0f-4ea7-4bac-8b35-42e022e364e3_0c9c2ed8-2bdc-45e9-8b0d-fb43d681f8df.jpg_compressed",
+              "isVeg": 1,
+              "price": 29700
+             }
+            },
+            {
+             "info": {
+              "id": "152155824",
+              "name": "Masala Uttapam",
+              "category": "South Indian Specials",
+              "description": "Uttapam Layered With Spiced Vegetable Masala.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/027b892a-9d42-4b84-8f52-0649d1d2a612_61acd812-a9ea-4ae5-91b9-e2648ca788d2.jpg_compressed",
+              "isVeg": 1,
+              "price": 26500
+             }
+            },
+            {
+             "info": {
+              "id": "164338069",
+              "name": "Roasted Onion Garlic Uttapam",
+              "category": "South Indian Specials",
+              "description": "Uttapam Infused With Roasted Onion And Garlic Flavours.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2025/4/15/2432ff83-d0ea-42ba-97a1-419f1ff84139_2bd1a04c-a516-4c7a-aa42-5d9173c7d651.jpg_compressed",
+              "isVeg": 1,
+              "price": 28100
+             }
+            },
+            {
+             "info": {
+              "id": "148000890",
+              "name": "Benne Soft Uttapam",
+              "category": "Benne",
+              "description": "Soft, Fluffy Uttapam Infused With Rich White Butter.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/0e9a57e7-8a71-4e57-9cc6-702a0fcb62ee_12fc08ae-0548-4b8f-8f62-8e57acfa49b2.jpg_compressed",
+              "isVeg": 1,
+              "price": 26500
+             }
+            },
+            {
+             "info": {
+              "id": "164338068",
+              "name": "Pudi Onion Uttapam",
+              "category": "South Indian Specials",
+              "description": "A Flavourful Mix Of Spiced Pudi And Onion For An Authentic Taste.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/90e50211-4c5e-422b-8fc4-6834f16bbebd_1a7db36a-96b9-49f2-9c4a-db3212bec90f.jpg_compressed",
+              "isVeg": 1,
+              "price": 29700
+             }
+            },
+            {
+             "info": {
+              "id": "164338072",
+              "name": "Veg. Soft Uttapam",
+              "category": "South Indian Specials",
+              "description": "Soft Uttapam Loaded With Assorted Vegetables.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/502ced5c-4a93-4921-8949-9ff58e67c3ef_9251b574-2d1b-4e94-96bc-45b76e177f36.jpg_compressed",
+              "isVeg": 1,
+              "price": 29200
+             }
+            },
+            {
+             "info": {
+              "id": "164338067",
+              "name": "Pav Bhaji Cheese Uttapam",
+              "category": "South Indian Specials",
+              "description": "Fusion Uttapam With Mumbai Pav Bhaji Flavours And Cheese.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/f3f73331-cd8a-46ab-9dff-daf6e8cf0dd9_b96aa058-b936-4bc7-8fa2-0178b54b1825.jpg_compressed",
+              "isVeg": 1,
+              "price": 30200
+             }
+            },
+            {
+             "info": {
+              "id": "193580499",
+              "name": "Jain Tomato Uttapam",
+              "category": "Jain Special",
+              "description": "Classic uttapam topped with tomato",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/2/4/686c4cde-bee2-4227-8adb-23c71c5aa04d_bc66f545-2509-43c6-afee-567cfa5c2507.JPG",
+              "isVeg": 1,
+              "price": 24300
+             }
+            },
+            {
+             "info": {
+              "id": "164338063",
+              "name": "Cheese Chilli Garlic Uttapam",
+              "category": "South Indian Specials",
+              "description": "Uttapam With Spicy Cheese, Chilli, And Garlic Topping.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/9f72126c-e285-4904-a8a1-f0159f54c758_24b94193-8386-4140-a425-5aa5f9d845d3.jpg_compressed",
+              "isVeg": 1,
+              "price": 30200
+             }
+            },
+            {
+             "info": {
+              "id": "164338064",
+              "name": "Cheese Tomato Paneer Uttapam",
+              "category": "South Indian Specials",
+              "description": "Uttapam Layered With Paneer, Tomato, And Melted Cheese.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/8/1/e77922b3-d230-491a-bf1b-0b8ab96a3b5b_ebc013ca-5152-475a-a161-939f5e9f41c5.jpg_compressed",
+              "isVeg": 1,
+              "price": 31300
+             }
+            },
+            {
+             "info": {
+              "id": "178214364",
+              "name": "Plain Uttapam",
+              "category": "South Indian Specials",
+              "description": "Thick And Soft South Indian Pancake Made From Fermented Rice And Lentil Batter, Served Without Toppings For A Classic Taste.",
+              "isVeg": 1,
+              "price": 15700
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "7887",
+             "name": "Priya",
+             "city": "6",
+             "slugs": {
+              "restaurant": "priya-mg-road-camp",
+              "city": "pune"
+             },
+             "areaName": "Camp"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "1386019",
+              "name": "Onion Uttapam",
+              "category": "Snacks",
+              "description": "(Serves1)",
+              "imageId": "fzjtdzfe4k5hfsakt1sm",
+              "isVeg": 1,
+              "price": 12500
+             }
+            },
+            {
+             "info": {
+              "id": "72104316",
+              "name": "Special Onion Uttapam",
+              "category": "Snacks",
+              "description": "(Serves1)",
+              "imageId": "oz4atjcviznbtyixmbqi",
+              "isVeg": 1,
+              "price": 14000
+             }
+            },
+            {
+             "info": {
+              "id": "1386020",
+              "name": "Tomato Uttapam",
+              "category": "Snacks",
+              "description": "An interesting spin on the classic dosa with tomatoes mixed into the dosa batter and spread to a thick consistency.",
+              "imageId": "dd6imiesmwwd0zio8xiz",
+              "isVeg": 1,
+              "price": 12000
+             }
+            },
+            {
+             "info": {
+              "id": "1386018",
+              "name": "Plain Uttapam",
+              "category": "Snacks",
+              "description": "A delightful and savory snack bursting with flavor, perfect for a quick and satisfying meal.",
+              "imageId": "on1cwqka9urgivscvhjv",
+              "isVeg": 1,
+              "price": 12500
+             }
+            },
+            {
+             "info": {
+              "id": "72104317",
+              "name": "Cheese Onion Uttpam",
+              "category": "Snacks",
+              "description": "A wholesome meal with flavor-packed soft uttapam topped with onions and cheese; served along with chutney and sambhar.",
+              "isVeg": 1,
+              "price": 16000
+             }
+            },
+            {
+             "info": {
+              "id": "72104314",
+              "name": "Cheese Plain Uttapam",
+              "category": "Snacks",
+              "description": "A delightful vegetarian snack, the Cheese Plain Uttapam is a scrumptious blend of Indian flavors and a mouthwatering cheesy indulgence.",
+              "isVeg": 1,
+              "price": 17000
+             }
+            },
+            {
+             "info": {
+              "id": "1386026",
+              "name": "Special Cheese Tomato Uttapam",
+              "category": "Snacks",
+              "description": "Deliciously cheesy uttapam topped with juicy tomatoes, perfect for a quick and savory snack.",
+              "isVeg": 1,
+              "price": 22000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "70614",
+             "name": "Wadeshwar",
+             "city": "6",
+             "slugs": {
+              "restaurant": "shree-wadeshwar-bhuvan-shukrawar-peth-swargate",
+              "city": "pune"
+             },
+             "areaName": "Sadashiv Peth"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "19964238",
+              "name": "Onion Uttapam Chutney",
+              "category": "Breakfast",
+              "description": "An interesting spin on the classic dosa with onions mixed into the dosa batter and spread to a thick consistency.",
+              "imageId": "p7egp3va5g0deevdh4j5",
+              "isVeg": 1,
+              "price": 10476
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "17809",
+             "name": "Niranjan Veg Restaurant",
+             "city": "6",
+             "slugs": {
+              "restaurant": "niranjan-veg-restaurant-fc-road-shivaji-nagar",
+              "city": "pune"
+             },
+             "areaName": "Shivaji Nagar"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "3300340",
+              "name": "Onion Uttapam",
+              "category": "South Indian",
+              "description": "A flavorful and mouth-watering South Indian delight bursting with subtle flavors and crisp onions.",
+              "imageId": "23cc52cd696d91137944db780eba622f",
+              "isVeg": 1,
+              "price": 11000
+             }
+            },
+            {
+             "info": {
+              "id": "3300346",
+              "name": "Masala Uttapam",
+              "category": "South Indian",
+              "description": "A flavorful and aromatic South Indian delicacy that will tantalize your taste buds.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/3/27/5f1f668e-b72d-4b6d-8ebb-1664884947ab_9c0d4504-527e-45b6-acf1-d2615eacb2ee.jpg",
+              "isVeg": 1,
+              "price": 13000
+             }
+            },
+            {
+             "info": {
+              "id": "3300341",
+              "name": "Onion Tomato Uttapam",
+              "category": "South Indian",
+              "description": "A delectable South Indian delight featuring a delightful blend of onions and tomatoes on a fluffy uttapam base.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/2/7/894f3fe2-4a53-42db-b99d-14e14f2f760b_67928b55-aa11-4beb-b719-cc60c3214acf.JPG",
+              "isVeg": 1,
+              "price": 12000
+             }
+            },
+            {
+             "info": {
+              "id": "3300344",
+              "name": "Cheese Onion Uttapam",
+              "category": "South Indian",
+              "description": "A flavorful and savory South Indian delight topped with melted cheese and caramelized onions.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/3/27/10993926-ab19-4ea1-82b8-69d5ab1d17af_979c966e-188b-4221-a5eb-b7947a12f347.jpg",
+              "isVeg": 1,
+              "price": 13000
+             }
+            },
+            {
+             "info": {
+              "id": "3300345",
+              "name": "Veg Uttapam",
+              "category": "South Indian",
+              "description": "A mouthwatering South Indian delight with a medley of colorful and flavorful vegetables.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/1/17/18d31095-9914-45a4-a9b0-da08e37af093_c63011f5-d68c-428e-89b2-eb6c39fcae3f.JPG",
+              "isVeg": 1,
+              "price": 13000
+             }
+            },
+            {
+             "info": {
+              "id": "3300339",
+              "name": "Plain Uttapam",
+              "category": "South Indian",
+              "description": "A delectable and flavorful South Indian delight made with a perfect blend of wholesome ingredients.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2024/3/27/787bd5cb-382a-4004-8a68-9d2ae9a85c3d_b27b6ec8-1935-4969-81ce-65d034b99e88.jpg",
+              "isVeg": 1,
+              "price": 8000
+             }
+            },
+            {
+             "info": {
+              "id": "3300342",
+              "name": "Coconut Uttapam",
+              "category": "South Indian",
+              "description": "A delectable South Indian specialty, this Coconut Uttapam is a delightful and flavorful vegetarian dish that will transport your taste buds to the exotic shores of Kerala.",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/2/7/edc01cb2-c867-41cf-b0c2-6fbe8e4a0789_e4916289-ff94-441f-b236-43269a60701b.JPG",
+              "isVeg": 1,
+              "price": 12000
+             }
+            }
+           ]
+          }
+         }
+        },
+        {
+         "card": {
+          "card": {
+           "@type": "type.googleapis.com/swiggy.presentation.food.v2.DishGroup",
+           "restaurant": {
+            "info": {
+             "id": "445353",
+             "name": "SA Dosa Cafe",
+             "city": "6",
+             "slugs": {
+              "restaurant": "s.a-dosa-cafe-shivaji-nagar-shivaji-nagar",
+              "city": "pune"
+             },
+             "areaName": "Kothrud"
+            }
+           },
+           "dishes": [
+            {
+             "info": {
+              "id": "184732772",
+              "name": "Onion Uttapam",
+              "category": "Uttappam",
+              "description": "Soft, thick uttapam topped with fresh onions, served with a choice of ghee, butter, or oil, along with coconut chutney and sambar. (Please mention in comment if you need green chilli on it.)",
+              "imageId": "0efa2a34f6e0b736be8f2da25c206002",
+              "isVeg": 1,
+              "price": 16900
+             }
+            },
+            {
+             "info": {
+              "id": "184732794",
+              "name": "Onion Tomato Uttapam",
+              "category": "Uttappam",
+              "description": "Soft, thick uttapam topped with fresh onions and tomatoes, served with a choice of ghee, butter, or oil, along with coconut chutney and sambar. (Please mention in comment if you need green chilli on it.)",
+              "imageId": "FOOD_CATALOG/IMAGES/CMS/2026/5/10/879657e5-a1b1-4325-a35b-98b876a4d622_3a286c66-6914-4b39-bebe-ca74c5bfb52a.JPG",
+              "isVeg": 1,
+              "price": 17900
+             }
+            },
+            {
+             "info": {
+              "id": "184732994",
+              "name": "Ghee Roast Podi Uttapam",
+              "category": "Uttappam",
+              "description": "Thick uttapam roasted in ghee with podi masala, served with coconut chutney and sambar. (Comment if you want green chilli.)",
+              "isVeg": 1,
+              "price": 24900
+             }
+            }
+           ]
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   }
+  ]
+ }
+}
