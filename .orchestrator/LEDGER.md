@@ -14,3 +14,4 @@
 - 2026-10-07T14:17:44Z session restart: resumed A5-fix, A6, B1 (partial work kept); L1 committed 87f709a but gate FAIL test_perf_400k_index 0.053>0.05 under load -> fix round 1 (O(1) tie-break). Eval A5 live: Food_Junction 83 ready+3 review/89, Vithai 53+8/71, Hard_Pending 66+114/226 (+16 needs_price w/ photo)
 - 2026-10-07T14:17:44Z Ruling: machine has 7.3 GB RAM (0.4 free with 2 suites) -> parallel full-suite verifies cause MemoryError/timing failures; from now on gates run sequentially on a quiet machine and no parallel executor waves — cost if wrong: slower wall-clock only
 - 2026-10-07T14:17:44Z B1 DONE_WITH_CONCERNS: verify failed only on load-sensitive test_sheets tc8 (MemoryError/speed); gemini+config tests pass. Gate later, sequentially
+- 2026-10-07T14:31:13Z wave5 merged (A6 B1 L1 gates PASS sequentially), verify-all 456 passed. Vithai A5 audit: 53 ready, 0 wrong (3 text-overlay photos -> judge). dispatch B1 review + B2
