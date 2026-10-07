@@ -364,3 +364,116 @@ def test_fix1_tc4_failed_rebuild_is_409_until_fixed(tmp_path, monkeypatch):
 def test_app_self_test():
     import app as app_module
     assert app_module.main(["--self-test"]) == 0
+
+
+# ---- A6: search + approve routes ----
+
+def _write_results(output_dir, job_id, rows):
+    (output_dir / job_id / "results.json").write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_a6_tc1_search_route(tmp_path, monkeypatch):
+    app, *_ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, job = _run_simple_job(client, tmp_path)
+    row = job["results"][0]
+    calls = []
+
+    def fake_search(engine, job_dir, sku, query):
+        calls.append((sku, query))
+        return pipeline.dish_result_from_dict(dict(row, alternates=[{"item_name": "A"}, {"item_name": "B"}]))
+
+    monkeypatch.setattr(server_mod, "search_photos", fake_search)
+
+    r = client.post(f"/api/jobs/{job_id}/dishes/{row['sku']}/search", json={"query": "Veg Thali"})
+
+    assert r.status_code == 200
+    assert len(r.json()["alternates"]) == 2
+    assert calls == [(row["sku"], "Veg Thali")]
+
+
+def test_a6_tc2_search_guards(tmp_path, monkeypatch):
+    app, *_ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, job = _run_simple_job(client, tmp_path)
+    sku = job["results"][0]["sku"]
+
+    empty = client.post(f"/api/jobs/{job_id}/dishes/{sku}/search", json={"query": "   "})
+    assert empty.status_code == 400 and empty.json()["detail"] == "Type a dish name to search for"
+    missing = client.post(f"/api/jobs/20200101-000000-nope/dishes/{sku}/search", json={"query": "x"})
+    assert missing.status_code == 404
+    monkeypatch.setattr(app.state.worker, "is_active", lambda jid: True)
+    busy = client.post(f"/api/jobs/{job_id}/dishes/{sku}/search", json={"query": "x"})
+    assert busy.status_code == 409
+
+
+def test_a6_tc3_approve_all_takes_review_dishes_and_rebuilds(tmp_path, monkeypatch):
+    app, output_dir, _ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, job = _run_simple_job(client, tmp_path)
+    base = job["results"][0]
+    prefix = base["sku"].rsplit("-", 1)[0]
+    skus = [f"{prefix}-001", f"{prefix}-002", f"{prefix}-003"]
+    _write_results(output_dir, job_id, [
+        dict(base, sku=skus[0], status="review"),
+        dict(base, sku=skus[1], status="ready"),
+        dict(base, sku=skus[2], status="review"),
+    ])
+    got = []
+    monkeypatch.setattr(server_mod, "approve_dishes", lambda engine, job_dir, s, uploader: got.append(s) or [])
+    gen_before = app.state.worker._gen.get(job_id, 0)
+
+    r = client.post(f"/api/jobs/{job_id}/approve", json={"all": True})
+
+    assert r.status_code == 200 and r.json() == {"results": []}
+    assert got == [[skus[0], skus[2]]]
+    assert app.state.worker._gen[job_id] == gen_before + 1
+
+
+def test_a6_tc4_approve_rejects_bad_sku(tmp_path):
+    app, *_ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    job_id, _job = _run_simple_job(client, tmp_path)
+
+    r = client.post(f"/api/jobs/{job_id}/approve", json={"skus": ["../x"]})
+
+    assert r.status_code == 400
+
+
+def test_a6_tc5_approve_real_lookalike_becomes_ready(tmp_path):
+    app, output_dir, _ = make_app(tmp_path)
+    client = TestClient(app)
+    wait_for_engine(app)
+    _disable_live_search(client)
+    url = IMG + "cheese1.jpg"
+    # retrieval skips tokens found in over a quarter of a tiny pool, so pad it
+    names = [("Paneer Pizza", "Pizza", "veg"), ("Cold Coffee", "Drinks", "veg"),
+             ("Mango Shake", "Shakes", "veg"), ("Veg Burger", "Burgers", "veg"),
+             ("Masala Dosa", "South", "veg"), ("Fries", "Sides", "veg"), ("Brownie", "Desserts", "veg"),
+             ("Dal Rice", "Meals", "veg")]
+    items = [PoolItem(0, n, cat, "Delivery", "", diet, url, "r2", "Paneer Place", RES_URL + "2", "pune", "")
+             for n, cat, diet in names]
+    app.state.worker.engine.add_items(RestaurantMenu("r2", "Paneer Place", RES_URL + "2", "pune", "", items))
+    upload_id = upload_menu(client, tmp_path, [["Green Chilli Paneer Pizza (Single Cheese)", "Pizza", "", 120]]).json()["upload_id"]
+    job_id = client.post("/api/jobs", json={"upload_id": upload_id, "vendor": "Test Cafe", "city": "pune"}).json()["id"]
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        job = client.get(f"/api/jobs/{job_id}").json()
+        if job["job"]["status"] in ("done", "failed", "cancelled"):
+            break
+        time.sleep(0.05)
+    dish = job["results"][0]
+    assert dish["status"] == "review", dish
+    job_file = output_dir / job_id / "job.json"
+    meta = json.loads(job_file.read_text(encoding="utf-8"))
+    meta["options"]["upload"] = False
+    job_file.write_text(json.dumps(meta), encoding="utf-8")
+
+    r = client.post(f"/api/jobs/{job_id}/approve", json={"skus": [dish["sku"]]})
+
+    assert r.status_code == 200
+    assert [d["status"] for d in r.json()["results"]] == ["ready"]

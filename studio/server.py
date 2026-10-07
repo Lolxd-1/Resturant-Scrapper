@@ -31,6 +31,7 @@ from studio.models import ImgbbKey, Settings, dish_result_to_dict
 from studio.pipeline import (
     Engine,
     JobOptions,
+    approve_dishes,
     build_engine,
     choose_alternate,
     job_lock,
@@ -38,6 +39,7 @@ from studio.pipeline import (
     new_job_id,
     rebuild_outputs,
     run_job,
+    search_photos,
 )
 from studio.zomato import CITIES
 
@@ -552,6 +554,51 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
                 raise HTTPException(400, str(exc))
             worker.request_rebuild(id)
         return dish_result_to_dict(result)
+
+    @app.post("/api/jobs/{id}/dishes/{sku}/search")
+    def search_dish(id: str, sku: str, body: dict):
+        job_dir = _existing_job_dir(id)
+        if not SKU_RE.match(sku):
+            raise HTTPException(404)
+        if worker.engine is None:
+            raise HTTPException(503, "Engine not ready")
+        if worker.is_active(id):
+            raise HTTPException(409, "This job is still running — wait until it finishes, then change photos.")
+        query = str(body.get("query") or "").strip()
+        if not query:
+            raise HTTPException(400, "Type a dish name to search for")
+        try:
+            result = search_photos(worker.engine, job_dir, sku, query)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        return dish_result_to_dict(result)
+
+    @app.post("/api/jobs/{id}/approve")
+    def approve_job_dishes(id: str, body: dict):
+        job_dir = _existing_job_dir(id)
+        if worker.engine is None:
+            raise HTTPException(503, "Engine not ready")
+        if worker.is_active(id):
+            raise HTTPException(409, "This job is still running — wait until it finishes, then change photos.")
+        if body.get("all"):
+            data = json.loads((job_dir / "results.json").read_text(encoding="utf-8"))
+            skus = [d["sku"] for d in data if d.get("status") == "review"]
+        else:
+            skus = body.get("skus")
+            if not isinstance(skus, list) or not all(isinstance(s, str) and SKU_RE.match(s) for s in skus):
+                raise HTTPException(400, "Invalid SKU list")
+        settings = load_settings(config_path)
+        uploader = (
+            Uploader(settings.imgbb_keys, store=worker.engine.store)
+            if any(k.key for k in settings.imgbb_keys) else None
+        )
+        with job_lock(job_dir):
+            try:
+                results = approve_dishes(worker.engine, job_dir, skus, uploader)
+            except ValueError as exc:
+                raise HTTPException(400, str(exc))
+            worker.request_rebuild(id)
+        return {"results": [dish_result_to_dict(r) for r in results]}
 
     @app.get("/api/jobs/{id}/files/{kind}")
     def get_job_file(id: str, kind: str):
