@@ -196,3 +196,46 @@ def test_fix3_worker_status_names_vc_runtime_when_onnxruntime_cannot_load(tmp_pa
     worker._load_engine()
 
     assert worker.status == VC_RUNTIME_STATUS
+
+
+# ---- B2 TC5: CLI from menu photos ----
+
+def _photo_cli_setup(tmp_path, monkeypatch, gemini_key):
+    import zomato_scrapper
+    env = Env(tmp_path)
+    monkeypatch.setattr(pipeline, "build_engine", lambda *a, **kw: env.engine())
+    monkeypatch.setattr(zomato_scrapper, "load_settings",
+                        lambda: type("S", (), {"gemini_key": gemini_key, "imgbb_keys": []})())
+    monkeypatch.setattr(zomato_scrapper, "ai_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(zomato_scrapper, "read_menu_images",
+                        lambda gem, imgs: ("X", [{"name": "Tea", "category": "Beverages", "description": "",
+                                                  "price": 15.0, "diet": "veg", "photo_names": []}]))
+    ran = []
+    monkeypatch.setattr(zomato_scrapper, "run_job", lambda engine, menu, *a, **kw: ran.append(menu) or {})
+    monkeypatch.setattr(zomato_scrapper, "load_job", lambda d: {"status": "done"})
+    photos = []
+    for n in ("a.jpg", "b.jpg"):
+        (tmp_path / n).write_bytes(b"x")
+        photos.append(str(tmp_path / n))
+    return photos, ran
+
+
+def test_cli_menu_image_writes_extract_and_runs_job(tmp_path, monkeypatch, capsys):
+    photos, ran = _photo_cli_setup(tmp_path, monkeypatch, "key")
+    out_dir = tmp_path / "out"
+
+    rc = main(["--menu-image", *photos, "--vendor", "X", "--out", str(out_dir), "--no-upload"])
+
+    assert rc == 0
+    assert (out_dir / "menu_extract.xlsx").is_file()
+    assert ran == [out_dir / "menu_extract.xlsx"]
+    assert "Read 1 dishes from 2 photo(s)" in capsys.readouterr().out
+
+
+def test_cli_menu_image_without_key_exits_2(tmp_path, monkeypatch, capsys):
+    photos, ran = _photo_cli_setup(tmp_path, monkeypatch, "")
+
+    rc = main(["--menu-image", *photos, "--vendor", "X", "--out", str(tmp_path / "out"), "--no-upload"])
+
+    assert rc == 2 and ran == []
+    assert "Add your free Gemini API key in Settings" in capsys.readouterr().out

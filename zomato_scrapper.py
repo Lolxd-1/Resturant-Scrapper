@@ -1,6 +1,6 @@
 """Headless CLI for the Menu Studio pipeline (v1 file name kept as the entry point).
 
-    python zomato_scrapper.py --menu-excel M.xlsx --vendor "Name" [--city pune]
+    python zomato_scrapper.py (--menu-excel M.xlsx | --menu-image P1.jpg [P2.jpg ...]) --vendor "Name" [--city pune]
         [--zomato-url URL] [--sku-prefix HFC] [--out DIR] [--no-upload] [--strict]
         [--no-live-search] [--budget 250]
 
@@ -15,10 +15,12 @@ import sys
 from pathlib import Path
 
 from studio import pipeline
-from studio.config import OUTPUT_DIR, load_settings
+from studio.config import OUTPUT_DIR, ai_cache_dir, load_settings
+from studio.gemini import Gemini, GeminiError
 from studio.hosting import Uploader
 from studio.models import ImgbbKey
 from studio.pipeline import JobOptions, load_job, new_job_id, run_job
+from studio.reader import MenuReadError, read_menu_images, write_extract
 
 
 def _uploader(settings, engine) -> Uploader | None:
@@ -44,7 +46,9 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     ap = argparse.ArgumentParser(description="Menu Studio pipeline (headless CLI)")
-    ap.add_argument("--menu-excel", required=True, help="Excel with Item Name/Category/Description/Price")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--menu-excel", help="Excel with Item Name/Category/Description/Price")
+    src.add_argument("--menu-image", nargs="+", metavar="PATH", help="1-8 menu photos to read with Gemini")
     ap.add_argument("--vendor", required=True, help="Vendor / restaurant name")
     ap.add_argument("--city", default="", help="Zomato city slug, e.g. pune")
     ap.add_argument("--zomato-url", default="", help="Vendor's own Zomato restaurant URL, if known")
@@ -57,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     settings = load_settings()
+    if args.menu_image and not settings.gemini_key:
+        print("Add your free Gemini API key in Settings (or config/settings.json) to read menu photos.")
+        return 2
     engine = pipeline.build_engine(settings, on_status=print)
     uploader = None if args.no_upload else _uploader(settings, engine)
 
@@ -67,7 +74,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     job_dir = Path(args.out) if args.out else OUTPUT_DIR / new_job_id(args.vendor)
 
-    summary = run_job(engine, Path(args.menu_excel), job_dir, opts, uploader=uploader, on_event=_on_event)
+    if args.menu_image:
+        try:
+            gemini = Gemini(settings.gemini_key, cache_dir=ai_cache_dir())
+            _, items = read_menu_images(gemini, [Path(p).read_bytes() for p in args.menu_image])
+        except (MenuReadError, GeminiError) as e:
+            print(e)
+            return 2
+        job_dir.mkdir(parents=True, exist_ok=True)
+        menu_path = write_extract(items, job_dir / "menu_extract.xlsx")
+        print(f"Read {len(items)} dishes from {len(args.menu_image)} photo(s)")
+    else:
+        menu_path = Path(args.menu_excel)
+
+    summary = run_job(engine, menu_path, job_dir, opts, uploader=uploader, on_event=_on_event)
 
     for fname in summary.get("files", {}).values():
         print(job_dir / fname)
