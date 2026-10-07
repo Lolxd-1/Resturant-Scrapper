@@ -23,6 +23,7 @@ class Settings:
     live_search: bool = True
     live_budget_menus: int = 250          # max restaurant menus fetched live per job
     default_city: str = ""                # zomato city slug, "" = auto
+    gemini_key: str = ""
 
 
 @dataclass

@@ -43,6 +43,12 @@ def models_dir() -> Path:
     return p
 
 
+def ai_cache_dir() -> Path:
+    p = home_dir() / "ai_cache"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def atomic_write_text(path: Path, text: str) -> None:
     """Write text to path via a tmp file + os.replace, retrying ~2 s on PermissionError
     (OneDrive/antivirus can briefly lock a file right after it's written)."""
@@ -78,6 +84,7 @@ def load_settings(path: Path | None = None) -> Settings:
             live_search=bool(raw.get("live_search", True)),
             live_budget_menus=max(0, min(2000, int(raw.get("live_budget_menus", 250)))),
             default_city=str(raw.get("default_city", "")).strip().lower(),
+            gemini_key=raw["gemini_key"].strip() if isinstance(raw.get("gemini_key"), str) else "",
         )
     except (ValueError, TypeError, AttributeError) as e:
         bad = path.with_suffix(".bad")

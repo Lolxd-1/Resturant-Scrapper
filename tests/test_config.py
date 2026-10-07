@@ -65,3 +65,15 @@ def test_home_dir_and_dish_result_round_trip(tmp_home):
         price=199.0, alternates=[{"item_name": "x"}],
     )
     assert dish_result_from_dict(dish_result_to_dict(r)) == r
+
+
+def test_gemini_key_round_trip_and_old_file(tmp_path):
+    p = tmp_path / "settings.json"
+    save_settings(Settings(gemini_key="AIza-test"), p)
+    assert load_settings(p).gemini_key == "AIza-test"
+    p.write_text(json.dumps({"strictness": "strict"}), encoding="utf-8")
+    assert load_settings(p).gemini_key == ""
+    p.write_text(json.dumps({"gemini_key": 5}), encoding="utf-8")
+    assert load_settings(p).gemini_key == ""
+    p.write_text(json.dumps({"gemini_key": "  k  "}), encoding="utf-8")
+    assert load_settings(p).gemini_key == "k"
