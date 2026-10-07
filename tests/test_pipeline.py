@@ -1,8 +1,10 @@
 """Offline end-to-end tests for studio.pipeline (FakeSession HTTP, tmp pool, fake vision, fake ImgBB)."""
 from __future__ import annotations
 
+import base64
 import io
 import json
+import re
 import sys
 import threading
 import zlib
@@ -18,6 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 from studio import pipeline
 from studio.brand import BrandGuard
 from studio.config import atomic_write_text
+from studio.gemini import GeminiError, GeminiQuotaError
 from studio.hosting import Uploader
 from studio.imaging import THUMB_SUFFIX, full_url, thumb_url
 from studio.models import Candidate, DishQuery, ImgbbKey, MatchScore, PoolItem, RestaurantMenu
@@ -34,9 +37,11 @@ from studio.pipeline import (
     run_job,
     search_photos,
 )
+from studio.prompts import ENRICH_SYSTEM, JUDGE_SYSTEM
 from studio.sheets import safe_vendor
 from studio.store import PoolStore
 from studio.swiggy import SEARCH_URL, SwiggyClient, parse_dish_search
+from studio.text import parse_dish
 from studio.vision import FOOD_PROMPTS, NullVision
 from studio.zomato import Http
 from tests.conftest import FakeResponse, FakeSession, make_xlsx
@@ -1174,3 +1179,250 @@ def test_p1_tc3_option_rung(tmp_path, monkeypatch):
     assert sandwich.option_rung is not None
     assert sandwich.rungs[sandwich.option_rung].base_key == "paneer chilli sandwich"
     assert by_name["Paneer Pizza"].option_rung is None
+
+
+# ---- B3: Gemini enrich + AI photo judge ----
+
+def _sent_photos(env, parts) -> dict[int, dict[str, str]]:
+    """{dish number: {photo label: image url}} as sent to the judge (thumb bytes mapped back to their url)."""
+    by_data = {base64.b64encode(queue[0].content).decode(): url
+               for url, queue in env.session.routes.items() if url.startswith(IMG)}
+    sent: dict[int, dict[str, str]] = {}
+    label = None
+    for p in parts:
+        if "text" in p:
+            m = re.fullmatch(r"Dish (\d+) photo ([A-D]):", p["text"])
+            label = (int(m[1]), m[2]) if m else None
+        elif label is not None:
+            sent.setdefault(label[0], {})[label[1]] = by_data[p["inlineData"]["data"]]
+    return sent
+
+
+class FakeGemini:
+    """Scripted Gemini. enrich: the enrich answer, or an exception to raise. judge: an exception to raise, or
+    judge(dish, label, url) -> (verdict, clean, quality) for each photo sent, None to leave the photo out."""
+
+    available = True
+
+    def __init__(self, env, enrich=None, judge=None):
+        self.env = env
+        self.enrich = enrich if enrich is not None else {"items": []}
+        self.judge = judge or (lambda dish, label, url: None)
+        self.calls: list[tuple[str, list[dict], int]] = []
+
+    def generate_json(self, system, parts, schema, *, high_res=False, max_output_tokens=65536):
+        self.calls.append((system, parts, max_output_tokens))
+        answer = self.enrich if system == ENRICH_SYSTEM else self.judge
+        if isinstance(answer, Exception):
+            raise answer
+        if system == ENRICH_SYSTEM:
+            return answer
+        dishes = []
+        for dish, photos in _sent_photos(self.env, parts).items():
+            rated = [(label, answer(dish, label, url)) for label, url in photos.items()]
+            dishes.append({"id": dish, "photos": [{"label": label, "verdict": v[0], "clean": v[1], "quality": v[2]}
+                                                  for label, v in rated if v]})
+        return {"dishes": dishes}
+
+    def parts(self, system: str) -> list[list[dict]]:
+        return [parts for s, parts, _ in self.calls if s == system]
+
+
+def _ai_engine(env, gemini) -> Engine:
+    return Engine(env.store, env.vision, env.http, gemini=gemini)
+
+
+def _filler(env) -> None:
+    # retrieval skips tokens found in over a quarter of a tiny pool, so pad it
+    env.pool("filler-place", [("Cold Coffee", "Drinks", "veg", "cc1"), ("Mango Shake", "Shakes", "veg", "mango1"),
+                              ("Masala Dosa", "South Indian", "veg", "dosa1")])
+
+
+B3_OPTS = dict(vendor="Test Cafe", live_search=False)
+
+
+def test_b3_tc1_enrich_fills_diet_and_photo_names(tmp_path):
+    env = Env(tmp_path)
+    env.pool("grill-place", [("Chicken Lollipop", "Starters", "nonveg", "lollipop")])
+    _filler(env)
+    gemini = FakeGemini(env, enrich={"items": [{
+        "id": 1, "diet": "nonveg", "description": "Crispy fried chicken lollipops.",
+        "photo_names": ["Tandoori Lollipop", "Chicken Lollipop", " chicken lollipop "]}]})
+    menu = env.menu([["Tandoori Lollipop", "Starters", "", 220]])
+
+    env.run(menu, JobOptions(**B3_OPTS), engine=_ai_engine(env, gemini), upload=False)
+
+    r = env.results()["Tandoori Lollipop"]
+    assert r["status"] == "review" and r["search_name"] == "Chicken Lollipop" and r["diet"] == "nonveg"
+    assert r["photo_names"] == ["Chicken Lollipop"] and r["description"] == "Crispy fried chicken lollipops."
+    [enrich] = gemini.parts(ENRICH_SYSTEM)
+    assert json.loads(enrich[0]["text"]) == [{"id": 1, "name": "Tandoori Lollipop", "category": "Starters",
+                                              "description": ""}]
+    assert [m for s, _, m in gemini.calls if s == ENRICH_SYSTEM] == [32768]
+    assert any(e.get("message") == "AI filled details for 1 dishes" for e in env.events)
+
+
+def test_b3_tc2_enrich_skipped_when_complete_and_survives_error(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    _filler(env)
+    gemini = FakeGemini(env)
+    menu = env.menu([["Paneer Pizza", "Pizza", "", 199, "Veg", "Veg Pizza"]], header=[*HEADER, "Diet", "Photo Names"])
+
+    env.run(menu, JobOptions(**B3_OPTS), engine=_ai_engine(env, gemini), upload=False)
+
+    assert gemini.parts(ENRICH_SYSTEM) == []
+
+    failing = FakeGemini(env, enrich=GeminiQuotaError("The free Gemini quota is used up for now."))
+    summary = env.run(env.menu([["Paneer Pizza", "Pizza", "", 199]], name="menu2.xlsx"), JobOptions(**B3_OPTS),
+                      job="job2", engine=_ai_engine(env, failing), upload=False)
+
+    assert load_job(tmp_path / "job2")["status"] == "done"
+    assert summary["warnings"].count("AI helper unavailable: The free Gemini quota is used up for now.") == 1
+    assert len(failing.calls) == 1  # no photo check after the error
+    assert env.results("job2")["Paneer Pizza"]["status"] == "ready"
+
+
+def test_b3_tc3_judge_vetoes_first_photo(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-a", [("Paneer Pizza", "Pizza", "veg", "paneer-a")])
+    env.pool("pizza-b", [("Paneer Pizza", "Pizza", "veg", "paneer-b")])
+    _filler(env)
+    menu = env.menu([["Paneer Pizza", "Pizza", "", 199]])
+    env.run(menu, JobOptions(**B3_OPTS), upload=False)
+    first = env.results()["Paneer Pizza"]["zomato_img"]
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("different", True, 5) if url == first
+                        else ("same", True, 3))
+
+    env.run(menu, JobOptions(**B3_OPTS), job="job2", engine=_ai_engine(env, gemini), upload=False)
+
+    [parts] = gemini.parts(JUDGE_SYSTEM)
+    photos = _sent_photos(env, parts)[1]
+    assert photos["A"] == first
+    r = env.results("job2")["Paneer Pizza"]
+    assert r["status"] == "ready" and r["zomato_img"] == photos["B"] and r["lookalike"] is False
+    assert r["alternates"] == []
+    assert any(e.get("message") == "AI checked photos for 1 dishes" for e in env.events)
+
+
+def test_b3_tc4_judge_similar_on_rung_zero_goes_to_review(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-a", [("Paneer Pizza", "Pizza", "veg", "paneer-a")])
+    env.pool("pizza-b", [("Paneer Pizza", "Pizza", "veg", "paneer-b")])
+    _filler(env)
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("same", False, 5) if label == "A"
+                        else ("similar", True, 3))
+
+    env.run(env.menu([["Paneer Pizza", "Pizza", "", 199]]), JobOptions(**B3_OPTS), engine=_ai_engine(env, gemini))
+
+    photos = _sent_photos(env, gemini.parts(JUDGE_SYSTEM)[0])[1]
+    r = env.results()["Paneer Pizza"]
+    assert r["status"] == "review" and r["lookalike"] is True and r["search_name"] == "Paneer Pizza"
+    assert r["zomato_img"] == photos["B"] and r["alternates"] == []
+    assert r["reason"] == "Similar photo — approve it or search again"
+    assert env.posts == []
+
+
+def test_b3_tc5_judge_all_different_needs_photo(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-a", [("Paneer Pizza", "Pizza", "veg", "paneer-a")])
+    env.pool("pizza-b", [("Paneer Pizza", "Pizza", "veg", "paneer-b")])
+    _filler(env)
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("different", True, 4))
+
+    env.run(env.menu([["Paneer Pizza", "Pizza", "", 199]]), JobOptions(**B3_OPTS), engine=_ai_engine(env, gemini),
+            upload=False)
+
+    r = env.results()["Paneer Pizza"]
+    assert r["status"] == "needs_photo" and r["reason"] == "AI found no matching photo (2 checked)"
+    assert r["zomato_img"] == "" and r["local_image"] == "" and r["alternates"] == []
+
+
+def test_b3_tc6_judge_rescues_dish_the_head_check_vetoed(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "head_margin", lambda vision, mat, head: np.full(len(mat), -1.0))
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    _filler(env)
+    menu = env.menu([["Paneer Pizza", "Pizza", "", 199]])
+    env.run(menu, JobOptions(**B3_OPTS), upload=False)
+    assert env.results()["Paneer Pizza"]["status"] == "needs_photo"
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("same", True, 4))
+
+    env.run(menu, JobOptions(**B3_OPTS), job="job2", engine=_ai_engine(env, gemini), upload=False)
+
+    r = env.results("job2")["Paneer Pizza"]
+    assert r["status"] == "ready" and r["zomato_img"] == IMG + "paneer-pizza.jpg" and r["reason"] == ""
+
+
+def test_b3_tc7_option_rung_same_is_ready(tmp_path):
+    env = Env(tmp_path)
+    env.pool("sandwich-place", [("Paneer Chilli Sandwich", "Sandwich", "veg", "paneer-sandwich")])
+    _filler(env)
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("same", True, 4))
+    dish = "Paneer Chilli Sandwich (with Mayo)"
+
+    env.run(env.menu([[dish, "Sandwich", "", 100]]), JobOptions(**B3_OPTS), engine=_ai_engine(env, gemini),
+            upload=False)
+
+    r = env.results()[dish]
+    assert r["status"] == "ready" and r["lookalike"] is False and r["search_name"] == ""
+    assert r["zomato_img"] == IMG + "paneer-sandwich.jpg" and r["reason"] == ""
+
+
+def test_b3_tc7_generic_rung_same_stays_review(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    _filler(env)
+    gemini = FakeGemini(env, judge=lambda dish, label, url: ("same", True, 5))
+
+    env.run(env.menu([["Green Chilli Paneer Pizza", "Pizza", "", 120]]), JobOptions(**B3_OPTS),
+            engine=_ai_engine(env, gemini), upload=False)
+
+    assert len(gemini.parts(JUDGE_SYSTEM)) == 1
+    r = env.results()["Green Chilli Paneer Pizza"]
+    assert r["status"] == "review" and r["lookalike"] is True and r["search_name"] == "Paneer Pizza"
+    assert r["reason"] == "Look-alike photo (Paneer Pizza) — approve it or search again"
+
+
+def test_b3_tc8_judge_error_keeps_a5_results(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-a", [("Paneer Pizza", "Pizza", "veg", "paneer-a")])
+    env.pool("pizza-b", [("Paneer Pizza", "Pizza", "veg", "paneer-b")])
+    _filler(env)
+    menu = env.menu([["Paneer Pizza", "Pizza", "", 199], [LOOKALIKE_DISH, "Pizza", "", 120]])
+    env.run(menu, JobOptions(**B3_OPTS), upload=False)
+    message = "Gemini could not answer right now (server error 500). Try again in a few minutes."
+    gemini = FakeGemini(env, judge=GeminiError(message))
+
+    summary = env.run(menu, JobOptions(**B3_OPTS), job="job2", engine=_ai_engine(env, gemini), upload=False)
+
+    assert len(gemini.parts(JUDGE_SYSTEM)) == 1
+    assert summary["warnings"].count(f"AI photo check unavailable: {message}") == 1
+    assert load_job(tmp_path / "job2")["status"] == "done"
+    assert env.results("job2") == env.results()
+
+
+def test_b3_tc9_judge_batches_of_25_and_skips_chain_picks(tmp_path):
+    env = Env(tmp_path)
+    gemini = FakeGemini(env)
+    run = pipeline._Run(_ai_engine(env, gemini), JobOptions(**B3_OPTS), env.tmp / "job1", None,
+                        env.events.append, lambda **changes: None, None, {})
+    for i in range(31):
+        c = _candidate(f"r{i}", env.image(f"dish-{i}"), "exact")
+        c.source = "chain" if i == 30 else "pool"
+        g = pipeline._Group(f"dish {i}", parse_dish(f"Dish {i}"))
+        r = pipeline.DishResult(row=i + 1, sku=f"TC-{i + 1:03d}", name=f"Dish {i}", category="Pizza",
+                                description="", price=100)
+        pipeline._apply_pick(r, pipeline._cand_dict(c))
+        g.rows, g.cands, g.kept = [r], [c], [c]
+        run.groups.append(g)
+
+    run.judge()
+
+    calls = gemini.parts(JUDGE_SYSTEM)
+    sent = [_sent_photos(env, parts) for parts in calls]
+    assert [len(s) for s in sent] == [25, 5]
+    assert calls[0][1] == {"text": "Dish 1: Dish 0 | category: Pizza | diet: unknown"}
+    urls = [url for s in sent for photos in s.values() for url in photos.values()]
+    assert len(set(urls)) == 30 and IMG + "dish-30.jpg" not in urls
+    assert [m for _, _, m in gemini.calls] == [16384, 16384]

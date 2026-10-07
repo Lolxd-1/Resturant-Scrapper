@@ -22,7 +22,8 @@ from rapidfuzz import fuzz
 
 from studio import imaging, sheets
 from studio.brand import GENERIC, BrandGuard, brand_words_from_pool
-from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, atomic_write_text, models_dir, pool_db_path
+from studio.config import SEED_POOL_PATH, TEMPLATE_PATH, ai_cache_dir, atomic_write_text, models_dir, pool_db_path
+from studio.gemini import Gemini, GeminiError, image_part, text_part
 from studio.hosting import UploadError, Uploader
 from studio.lexicon import HEAD_CUISINES, HEAD_GROUP, TOKEN_CUISINES
 from studio.matcher import PoolIndex, rank, same_dish_menu_match
@@ -31,12 +32,15 @@ from studio.models import (
     Candidate,
     DishQuery,
     DishResult,
+    MenuRow,
     PoolItem,
     RestaurantMenu,
     Settings,
     dish_result_from_dict,
     dish_result_to_dict,
 )
+from studio.prompts import ENRICH_SCHEMA, ENRICH_SYSTEM, JUDGE_SCHEMA, JUDGE_SYSTEM
+from studio.reader import _clean_item
 from studio.spelling import Speller
 from studio.store import PoolStore
 from studio.swiggy import SWIGGY_CITIES, SwiggyBlocked, SwiggyClient
@@ -64,6 +68,7 @@ STAGE_LABELS = {
     "match": "Matching dishes",
     "search": "Searching Zomato",
     "verify": "Checking photos",
+    "judge": "AI photo check",
     "photos": "Downloading photos",
     "upload": "Uploading photos",
     "build": "Building sheets",
@@ -81,6 +86,8 @@ GROUP_CATEGORY = {
 BLOCKED_MESSAGE = "Zomato is limiting requests from this PC; continuing with photos already found."
 SWIGGY_BLOCKED_MESSAGE = "Swiggy is limiting requests from this PC; continuing without it."
 SWIGGY_MAX_REQUESTS = 600
+AI_ENRICH_BATCH = 120       # dishes per Gemini enrich call
+AI_JUDGE_BATCH = 25         # dishes per Gemini photo-check call
 NO_KEY_MESSAGE = "No ImgBB API key saved. Add one in Settings."
 FALLBACK_CITIES = ("pune", "mumbai", "ncr", "bangalore")
 MAX_SOURCE_OUTLETS = 25
@@ -108,12 +115,14 @@ class JobCancelled(Exception):
 
 
 class Engine:
-    def __init__(self, store: PoolStore, vision: Vision, http: Http, swiggy: SwiggyClient | None = None):
+    def __init__(self, store: PoolStore, vision: Vision, http: Http, swiggy: SwiggyClient | None = None,
+                 gemini: Gemini | None = None):
         self.store = store
         self.vision = vision
         self.http = http
         self.client = ZomatoClient(http)
         self.swiggy = swiggy          # None = Swiggy search disabled
+        self.gemini = gemini          # None = AI helpers off; the server sets it per job
         self.index = PoolIndex(store.all_items())
         self.blocked_until: float = 0.0
 
@@ -141,7 +150,10 @@ def build_engine(settings: Settings | None = None, *, allow_download: bool = Tru
     status("Loading the visual check")
     vision = load_vision(models_dir(), allow_download=allow_download)
     http = Http()
-    return Engine(store, vision, http, SwiggyClient(http))
+    gemini = None
+    if settings is not None and settings.gemini_key:
+        gemini = Gemini(settings.gemini_key, cache_dir=ai_cache_dir())
+    return Engine(store, vision, http, SwiggyClient(http), gemini)
 
 
 def new_job_id(vendor: str) -> str:
@@ -192,6 +204,7 @@ class _Group:
         self.option_rung: int | None = None  # rung that is this dish without its bracketed option
         self.rows: list[DishResult] = []
         self.cands: list[Candidate] = []
+        self.kept: list[Candidate] = []  # photos the verify stage kept, best first
         self.source = ""          # "own" / "chain" when picked from the vendor's own menus
         self.failed = False
         self.resumed = False
@@ -420,6 +433,7 @@ def run_job(engine: Engine, menu_path: Path, job_dir: Path, opts: JobOptions, *,
             run.match()
             run.search()
             run.verify()
+            run.judge()
             run.photos()
             run.upload()
             run.settle_all()
@@ -482,6 +496,8 @@ class _Run:
         self.vendor_key = chain_key(opts.vendor)
         self.brand_guard: BrandGuard | None = None
         self.big_chains: set[str] = set()
+        gemini = engine.gemini
+        self.gemini = gemini if gemini is not None and gemini.available else None  # None after a Gemini error
 
     # ---- helpers ----
 
@@ -498,6 +514,12 @@ class _Run:
     def say(self, message: str) -> None:
         log.info(message)
         self.emit({"type": "log", "message": message})
+
+    def ai_failed(self, message: str) -> None:
+        """Stop calling Gemini for the rest of the job (free quota is tiny) and warn once."""
+        self.gemini = None
+        self.warnings.append(message)
+        self.say(message)
 
     def write_results(self) -> None:
         data = [dish_result_to_dict(r) for r in self.results]
@@ -557,6 +579,7 @@ class _Run:
             self.emit({"type": "error", "message": self.read_error})
             return False
         self.warnings += parsed.warnings
+        self._enrich(parsed.rows)
         prefix = re.sub(r"[^A-Z0-9]", "", self.opts.sku_prefix.upper())[:6] or derive_sku_prefix(self.opts.vendor)
         by_key: dict[str, _Group] = {}
         speller = Speller(self.engine.index.word_counts())
@@ -596,6 +619,34 @@ class _Run:
             by_key[key].rows.append(r)
         self.say(f"Menu has {len(self.results)} dishes ({len(self.groups)} distinct)")
         return True
+
+    def _enrich(self, rows: list[MenuRow]) -> None:
+        """Fill rows' empty diet / photo names / description with one Gemini call per AI_ENRICH_BATCH rows."""
+        todo = [row for row in rows if not row.photo_names or not row.diet]
+        if self.gemini is None or not todo:
+            return
+        filled = 0
+        try:
+            for start in range(0, len(todo), AI_ENRICH_BATCH):
+                batch = {row.row: row for row in todo[start:start + AI_ENRICH_BATCH]}
+                dishes = [{"id": row.row, "name": row.name, "category": row.category, "description": row.description}
+                          for row in batch.values()]
+                answer = self.gemini.generate_json(ENRICH_SYSTEM, [text_part(json.dumps(dishes, ensure_ascii=False))],
+                                                   ENRICH_SCHEMA, max_output_tokens=32768)
+                for raw in answer.get("items") or []:
+                    row = batch.pop(raw.get("id"), None) if isinstance(raw, dict) else None
+                    if row is None:
+                        continue
+                    got = _clean_item({**raw, "name": row.name})
+                    before = (row.diet, row.photo_names, row.description)
+                    row.diet = row.diet or got["diet"]
+                    row.photo_names = row.photo_names or got["photo_names"]
+                    row.description = row.description or got["description"]
+                    filled += (row.diet, row.photo_names, row.description) != before
+        except GeminiError as exc:
+            self.ai_failed(f"AI helper unavailable: {exc}")
+        if filled:
+            self.say(f"AI filled details for {filled} dishes")
 
     def source(self) -> None:
         self.stage("source")
@@ -903,6 +954,7 @@ class _Run:
         if not kept:
             rung, kept = self._lookalike_kept(g, pool, sizes)
         kept.sort(key=lambda c: (_TIER_RANK[c.score.tier], -c.final))
+        g.kept = kept
 
         if not kept:
             if not any(g.q.variants):
@@ -961,6 +1013,101 @@ class _Run:
                 c.final = _combine_scores(c, big_brand)
                 kept.append(c)
         return rung, kept
+
+    def judge(self) -> None:
+        if self.gemini is None:
+            return
+        store = self.engine.store
+        todo: list[tuple[_Group, list[Candidate]]] = []
+        for g in self.groups:
+            if g.failed or g.rows[0].source in ("own", "chain"):
+                continue
+            # Nothing kept: let the AI rescue rung-0 matches the CLIP check may have vetoed wrongly.
+            cands = g.kept[:4] or [c for c in g.cands if c.rung == 0 and c.score.tier in ("exact", "strong")
+                                   and not store.is_bad_image(c.item.img_url)][:4]
+            if cands:
+                todo.append((g, cands))
+        if not todo:
+            return
+        self.stage("judge")
+        judged = 0
+        try:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                for start in range(0, len(todo), AI_JUDGE_BATCH):
+                    self.check()
+                    judged += self._judge_batch(todo[start:start + AI_JUDGE_BATCH], pool)
+                    self.stage("judge", min(1.0, (start + AI_JUDGE_BATCH) / len(todo)))
+        except GeminiError as exc:
+            self.ai_failed(f"AI photo check unavailable: {exc}")
+        if judged:
+            self.say(f"AI checked photos for {judged} dishes")
+
+    def _judge_batch(self, batch: list[tuple[_Group, list[Candidate]]], pool: ThreadPoolExecutor) -> int:
+        """One Gemini call for the batch's photos; applies the verdicts and returns how many dishes got one."""
+        http = self.engine.http
+        urls = list(dict.fromkeys(c.item.img_url for _, cands in batch for c in cands))
+        thumbs = dict(zip(urls, pool.map(lambda url: imaging.fetch_thumb_ex(url, http)[0], urls)))
+        parts: list[dict] = []
+        sent: list[tuple[_Group, dict[str, Candidate]]] = []
+        for g, cands in batch:
+            by_label = dict(zip("ABCD", (c for c in cands if thumbs[c.item.img_url] is not None)))
+            if not by_label:
+                continue
+            i, first = len(sent) + 1, g.rows[0]
+            parts.append(text_part(f"Dish {i}: {g.q.display} | category: {first.category or '-'}"
+                                   f" | diet: {first.diet or 'unknown'}"))
+            for label, c in by_label.items():
+                parts += [text_part(f"Dish {i} photo {label}:"), image_part(thumbs[c.item.img_url])]
+            sent.append((g, by_label))
+        if not sent:
+            return 0
+        intro = text_part(f"{len(sent)} dishes and their candidate photos. Judge every photo.")
+        answer = self.gemini.generate_json(JUDGE_SYSTEM, [intro, *parts], JUDGE_SCHEMA, max_output_tokens=16384)
+        photos_by_id = {d.get("id"): d.get("photos") or [] for d in answer.get("dishes") or [] if isinstance(d, dict)}
+        judged = 0
+        for i, (g, by_label) in enumerate(sent, 1):
+            verdicts = {p["label"]: p for p in photos_by_id.get(i, [])
+                        if isinstance(p, dict) and p.get("label") in by_label}
+            if verdicts:
+                self._apply_verdicts(g, [(c, verdicts[label]) for label, c in by_label.items() if label in verdicts])
+                judged += 1
+        return judged
+
+    def _apply_verdicts(self, g: _Group, judged: list[tuple[Candidate, dict]]) -> None:
+        """Re-pick g's photo from the AI verdicts. Look-alikes always need approval: only a "same" photo
+        of the dish itself (rung 0, or the dish without its bracketed option) becomes ready."""
+        def order(cv: tuple[Candidate, dict]) -> tuple[bool, float]:
+            quality = cv[1].get("quality")
+            return cv[1]["verdict"] != "same", -(quality if isinstance(quality, (int, float)) else 0)
+
+        ok = sorted(((c, v) for c, v in judged if v.get("clean") is True and v.get("verdict") in ("same", "similar")),
+                    key=order)
+        if not ok:
+            what = "matching photo" if judged[0][0].rung == 0 else "matching look-alike photo"
+            empty = {"item_name": "", "restaurant": "", "restaurant_url": "", "zomato_img": "", "tier": "",
+                     "confidence": 0.0, "source": ""}
+            for r in g.rows:
+                _apply_pick(r, empty)
+                r.alternates, r.lookalike = [], False
+                r.reason = f"AI found no {what} ({len(judged)} checked)"
+            return
+        best, verdict = ok[0][0], ok[0][1]["verdict"]
+        if self.used_images.get(best.item.img_url, g.key) != g.key:
+            best = next((c for c, v in ok[1:] if v["verdict"] == verdict
+                         and self.used_images.get(c.item.img_url, g.key) == g.key), best)
+        self.used_images[best.item.img_url] = g.key
+        pick = _cand_dict(best)
+        alternates = [_cand_dict(c) for c, _ in ok if c is not best][:4]
+        for r in g.rows:
+            _apply_pick(r, pick)
+            r.alternates = [dict(a) for a in alternates]
+            if verdict == "same" and best.rung in (0, g.option_rung):
+                r.lookalike, r.search_name, r.reason = False, "", ""
+            elif best.rung == 0:
+                r.lookalike, r.search_name = True, g.q.display
+                r.reason = "Similar photo — approve it or search again"
+            else:
+                r.lookalike = True
 
     def photos(self) -> None:
         self.stage("photos")
