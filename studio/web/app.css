@@ -440,3 +440,5 @@ tr:last-child td { border-bottom: 0; }
     transition-duration: .001ms !important;
   }
 }
+.search-row { display: flex; gap: 8px; }
+.search-row .input { flex: 1; min-width: 0; }

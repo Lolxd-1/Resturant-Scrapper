@@ -28,6 +28,7 @@ const STATUS_PILL = {
 
 const DISH_STATUS = {
   ready: ["Ready", "green", "check"],
+  review: ["Review look-alike", "orange", "photo"],
   needs_photo: ["Needs photo", "orange", "photo"],
   needs_price: ["Needs price", "orange", "tag"],
   error: ["Error", "red", "alert"],
@@ -36,6 +37,7 @@ const DISH_STATUS = {
 const FILTERS = [
   ["all", "All"],
   ["ready", "Ready"],
+  ["review", "Review"],
   ["needs_photo", "Needs photo"],
   ["needs_price", "Needs price"],
   ["error", "Errors"],
@@ -216,10 +218,17 @@ function derivePrefix(vendor) {
   return prefix || "SKU";
 }
 
+function thumbUrl(url) {
+  const swiggy = "https://media-assets.swiggy.com/swiggy/image/upload/";
+  if (url.startsWith(swiggy)) return `${swiggy}fl_lossy,f_auto,q_auto,w_300,h_300,c_fill/${url.slice(swiggy.length)}`;
+  return url + THUMB_SUFFIX;
+}
+
 function sourceCaption(r) {
   if (!r.source) return "";
   if (r.source === "own") return "Own menu";
   if (r.source === "chain") return "Chain photo";
+  if (r.source === "swiggy") return r.restaurant ? `From ${r.restaurant} (Swiggy)` : "From Swiggy";
   return r.restaurant ? `From ${r.restaurant}` : "From Zomato";
 }
 
@@ -617,7 +626,7 @@ function jobView(view, id) {
   }
 
   function counts() {
-    const c = { total: results.size, photos: 0, ready: 0, needs_photo: 0, needs_price: 0, error: 0 };
+    const c = { total: results.size, photos: 0, ready: 0, review: 0, needs_photo: 0, needs_price: 0, error: 0 };
     for (const r of results.values()) {
       if (r.local_image) c.photos += 1;
       if (r.status in c) c[r.status] += 1;
@@ -706,8 +715,10 @@ function jobView(view, id) {
         h("div", { style: "flex:1;min-width:240px" },
           h("h2", { class: "title2 num", style: "margin-bottom:16px" }, `${c.ready} of ${c.total} ready`),
           h("div", { class: "stats" },
-            stat(c.photos, "Photos found"), stat(c.needs_photo, "Need owner photo"),
+            stat(c.photos, "Photos found"), stat(c.review, "Look-alikes to review"), stat(c.needs_photo, "Need owner photo"),
             stat(c.needs_price, "Need price"), stat(c.error, "Errors")))),
+      c.review ? h("div", { class: "downloads" },
+        h("button", { class: "btn primary", type: "button", onclick: (e) => approveAll(e.currentTarget, c.review) }, `Approve all look-alikes (${c.review})`)) : null,
       dl.length ? h("div", { class: "downloads" }, dl) : null,
       job.error ? h("p", { class: "caption", style: "margin:16px 0 0" }, job.error) : null,
     ));
@@ -774,7 +785,7 @@ function jobView(view, id) {
       h("span", { class: "tile-body" },
         h("span", { class: "tile-name" }, r.name),
         h("span", { class: "tile-meta num" }, formatPrice(r.price), " · ", statusText),
-        h("span", { class: "tile-meta" }, confidenceDot(r), h("span", { class: "src" }, sourceCaption(r) || "No photo"))));
+        h("span", { class: "tile-meta" }, confidenceDot(r), h("span", { class: "src" }, r.status === "review" ? `Look-alike: ${r.search_name}` : sourceCaption(r) || "No photo"))));
     tiles.set(r.sku, { r, el });
     return el;
   }
@@ -800,10 +811,20 @@ function jobView(view, id) {
         h("dt", null, "Tier"), h("dd", null, r.tier || "—"),
         h("dt", null, "Source"), h("dd", null, sourceCaption(r) || "—")),
     );
+    if (canEdit && r.status === "review") {
+      body.append(h("div", { class: "actions", style: "justify-content:flex-start;margin-top:0" },
+        h("button", { class: "btn primary", type: "button", onclick: (e) => approve(sku, e.currentTarget) }, "Approve this photo")));
+    }
+    if (canEdit && r.local_image) {
+      const q = h("input", { class: "input", type: "search", "aria-label": "Dish name to search for", value: r.search_name || (r.photo_names && r.photo_names[0]) || r.name });
+      const go = h("button", { class: "btn", type: "button", onclick: () => searchPhotos(sku, q.value, go) }, "Search photos");
+      q.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
+      body.append(h("div", { class: "search-row" }, q, go));
+    }
     if (r.alternates && r.alternates.length) {
       body.append(h("h3", { class: "headline", style: "margin:8px 0 0" }, "Other photos"),
         h("div", { class: "alts" }, r.alternates.map((alt, i) => h("div", { class: "alt" },
-          alt.zomato_img ? h("img", { src: alt.zomato_img + THUMB_SUFFIX, alt: alt.item_name || r.name, loading: "lazy" }) : null,
+          alt.zomato_img ? h("img", { src: thumbUrl(alt.zomato_img), alt: alt.item_name || r.name, loading: "lazy" }) : null,
           h("span", null, alt.item_name || "", alt.restaurant ? h("span", { class: "muted" }, ` @ ${alt.restaurant}`) : null),
           h("button", { class: "btn", type: "button", disabled: !canEdit || !alt.zomato_img, onclick: (e) => choose(sku, i, e.currentTarget) }, "Use this photo")))));
     }
@@ -832,6 +853,57 @@ function jobView(view, id) {
       renderList();
       renderHero();
       toast(altIndex == null ? "Marked as needing an owner photo" : "Photo updated");
+    } catch (err) {
+      toastError(err);
+      button.disabled = false;
+      button.querySelector(".spinner")?.remove();
+    }
+  }
+
+  async function approve(sku, button) {
+    button.disabled = true;
+    button.prepend(icon("spin"));
+    try {
+      const data = await api("POST", `${base}/approve`, { skus: [sku] });
+      if (!alive) return;
+      for (const r of data.results) results.set(r.sku, r);
+      closeSheet();
+      renderList();
+      renderHero();
+      toast("Approved");
+    } catch (err) {
+      toastError(err);
+      button.disabled = false;
+      button.querySelector(".spinner")?.remove();
+    }
+  }
+
+  async function approveAll(button, n) {
+    button.disabled = true;
+    button.prepend(icon("spin"));
+    try {
+      await api("POST", `${base}/approve`, { all: true });
+      if (!alive) return;
+      await recheck(false, false);
+      toast(`Approved ${n} photos`);
+    } catch (err) {
+      toastError(err);
+      button.disabled = false;
+      button.querySelector(".spinner")?.remove();
+    }
+  }
+
+  async function searchPhotos(sku, query, button) {
+    button.disabled = true;
+    button.prepend(icon("spin"));
+    try {
+      const updated = await api("POST", `${base}/dishes/${encodeURIComponent(sku)}/search`, { query });
+      if (!alive) return;
+      results.set(sku, updated);
+      renderList();
+      closeSheet();
+      openDetail(sku);
+      if (!updated.alternates || !updated.alternates.length) toast("No photos found — try a simpler name");
     } catch (err) {
       toastError(err);
       button.disabled = false;
