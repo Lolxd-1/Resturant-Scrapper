@@ -134,8 +134,8 @@ class PoolIndex:
                     added += 1
         items = self._items
         kept = [(w, p) for p, w in weights.items() if _diet_ok(q.diet, items[p].diet)]
-        # equal idf sums: prefer fewer unmatched item tokens, so an exact "Palak" outranks hundreds of "Palak X"
-        top = heapq.nlargest(limit, kept, key=lambda wp: (wp[0] - 0.01 * len(self._tokens[wp[1]] - query_toks), -wp[1]))
+        # equal idf sums: prefer items with fewer tokens, so an exact "Palak" outranks hundreds of "Palak X"
+        top = heapq.nlargest(limit, kept, key=lambda wp: (wp[0] - 0.01 * len(self._tokens[wp[1]]), -wp[1]))
         return [items[p] for _, p in top]
 
 
