@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook
 
-from studio.menu import clean_category, derive_sku_prefix, parse_price, read_menu
+from studio.menu import (
+    clean_category, derive_sku_prefix, parse_diet, parse_photo_names, parse_price, read_menu,
+)
 from tests.conftest import make_xlsx
 
 GANESH_PATH = Path(
@@ -231,3 +233,54 @@ def test_tc13_real_ganesh_file():
     shrikhand_rows = [r for r in result.rows if r.name == "Shrikhand"]
     assert shrikhand_rows
     assert all(r.price is None for r in shrikhand_rows)
+
+
+def test_diet_and_photo_names_columns(tmp_path):
+    rows = [
+        ["Item Name", "Category", "Description", "Price", "Diet", "Photo Names"],
+        ["Paneer Pizza (Single Cheese)", "Pizza", "", 120, "Veg", "Paneer Pizza; Veg Pizza"],
+    ]
+    result = read_menu(make_xlsx(tmp_path / "menu.xlsx", rows))
+    r = result.rows[0]
+    assert (r.diet, r.photo_names, r.price, r.category) == (
+        "veg", ["Paneer Pizza", "Veg Pizza"], 120.0, "Pizza",
+    )
+
+
+def test_diet_and_photo_names_header_synonyms(tmp_path):
+    rows = [
+        ["Dish", "Section", "Rate", "Veg/Non-Veg", "Photo Search Names"],
+        ["Tandoori Lollipop", "Starters", 220, "Non-Veg", "Chicken Lollipop | Tandoori Chicken"],
+    ]
+    r = read_menu(make_xlsx(tmp_path / "menu.xlsx", rows)).rows[0]
+    assert r.diet == "nonveg"
+    assert r.photo_names == ["Chicken Lollipop", "Tandoori Chicken"]
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("VEG", "veg"), ("Vegetarian", "veg"), ("non-veg", "nonveg"),
+    ("Non Vegetarian", "nonveg"), ("NV", "nonveg"), ("Egg", "egg"),
+    ("eggetarian", "egg"), ("maybe", ""), (None, ""), (5, ""),
+])
+def test_parse_diet(value, expected):
+    assert parse_diet(value) == expected
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("A; B;; a", ["A", "B"]),
+    ("  x  |  y\nz ", ["x", "y", "z"]),
+    ("1;2;3;4;5", ["1", "2", "3", "4"]),
+    (None, []), ("", []), (12, []),
+])
+def test_parse_photo_names(value, expected):
+    assert parse_photo_names(value) == expected
+
+
+def test_menu_without_optional_columns_has_empty_diet_and_photo_names(tmp_path):
+    rows = [
+        ["Item Name", "Category", "Description", "Price"],
+        ["Pizza", "Main", "Cheesy", 250],
+        ["Coke", "Beverages", "Cold", 50],
+    ]
+    result = read_menu(make_xlsx(tmp_path / "menu.xlsx", rows))
+    assert all(r.diet == "" and r.photo_names == [] for r in result.rows)

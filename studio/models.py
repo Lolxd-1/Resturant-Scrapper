@@ -34,6 +34,8 @@ class MenuRow:
     description: str
     price: float | None       # None = missing/unparseable/<=0
     warnings: list[str] = field(default_factory=list)
+    diet: str = ""            # "veg" | "nonveg" | "egg" | "" = unknown/absent
+    photo_names: list[str] = field(default_factory=list)  # look-alike dish names for photo search
 
 
 @dataclass

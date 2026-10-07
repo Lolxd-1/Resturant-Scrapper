@@ -17,7 +17,7 @@ from studio.models import MenuParseResult, MenuRow
 _MAX_ROWS = 2000
 _MAX_HEADER_SCAN = 15
 
-_ROLE_ORDER = ("name", "category", "description", "price")
+_ROLE_ORDER = ("name", "category", "description", "price", "diet", "photo_names")
 _ROLE_SYNONYMS = {
     "name": {
         "item name", "item", "dish", "dish name", "name", "product",
@@ -30,7 +30,21 @@ _ROLE_SYNONYMS = {
         "price", "rate", "mrp", "amount", "cost", "selling price",
         "price rs", "price inr", "rs",
     },
+    "diet": {"diet", "veg non veg", "veg nonveg", "veg or non veg", "food type", "veg non veg egg"},
+    "photo_names": {
+        "photo names", "photo name", "photo search names", "search names",
+        "look alike names", "lookalike names",
+    },
 }
+
+_DIET_VALUES = {
+    "veg": "veg", "vegetarian": "veg", "v": "veg", "pure veg": "veg", "green": "veg",
+    "non veg": "nonveg", "nonveg": "nonveg", "non vegetarian": "nonveg", "nv": "nonveg", "red": "nonveg",
+    "egg": "egg", "eggetarian": "egg", "contains egg": "egg",
+}
+_PHOTO_NAMES_SPLIT_RE = re.compile(r"[;|\n]")
+_MAX_PHOTO_NAMES = 4
+_MAX_PHOTO_NAME_LEN = 80
 
 _PRICE_STRIP_RE = re.compile(r"₹|rs\.?|inr|/-|[,\s]", re.IGNORECASE)
 _PRICE_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
@@ -58,6 +72,26 @@ def parse_price(value: object) -> float | None:
         num = float(match.group())
         return num if num > 0 else None
     return None
+
+
+def parse_diet(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return _DIET_VALUES.get(_normalize_header_cell(value), "")
+
+
+def parse_photo_names(value: object) -> list[str]:
+    if not isinstance(value, str):
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for part in _PHOTO_NAMES_SPLIT_RE.split(value):
+        name = _WHITESPACE_RE.sub(" ", part).strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        names.append(name[:_MAX_PHOTO_NAME_LEN])
+    return names[:_MAX_PHOTO_NAMES]
 
 
 def clean_category(text: str) -> str:
@@ -175,6 +209,8 @@ def _parse_rows(rows: list[tuple]) -> dict:
     category_idx = columns.get("category")
     description_idx = columns.get("description")
     price_idx = columns.get("price")
+    diet_idx = columns.get("diet")
+    photo_idx = columns.get("photo_names")
 
     dish_rows: list[MenuRow] = []
     current_section = ""
@@ -246,6 +282,8 @@ def _parse_rows(rows: list[tuple]) -> dict:
                 description=description,
                 price=price,
                 warnings=row_warnings,
+                diet=parse_diet(_cell(row, diet_idx)),
+                photo_names=parse_photo_names(_cell(row, photo_idx)),
             )
         )
         i += 1
