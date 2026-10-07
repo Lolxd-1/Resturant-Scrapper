@@ -90,6 +90,39 @@ class PoolStore:
             self._items_cache = None
             return len(rows)
 
+    def add_items(self, menu: RestaurantMenu) -> list[PoolItem]:
+        """Merge a menu's new items into the pool without deleting anything."""
+        ck = chain_key(menu.name)
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO restaurants (res_url, res_id, name, city, cuisines, chain_key, fetched_at, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'swiggy') "
+                "ON CONFLICT(res_url) DO NOTHING",
+                (menu.url, menu.res_id, menu.name, menu.city, menu.cuisines, ck, time.time()),
+            )
+            known = set(self._conn.execute(
+                "SELECT name, img_url FROM items WHERE res_url = ?", (menu.url,)
+            ).fetchall())
+            inserted: list[PoolItem] = []
+            for it in menu.items:
+                if (it.name, it.img_url) in known:
+                    continue
+                known.add((it.name, it.img_url))
+                cur = self._conn.execute(
+                    "INSERT INTO items (res_url, name, category, menu_name, description, diet, img_url) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (menu.url, it.name, it.category, it.menu_name, it.description, it.diet, it.img_url),
+                )
+                inserted.append(PoolItem(
+                    item_id=cur.lastrowid, name=it.name, category=it.category, menu_name=it.menu_name,
+                    description=it.description, diet=it.diet, img_url=it.img_url,
+                    res_id=menu.res_id, res_name=menu.name, res_url=menu.url, city=menu.city,
+                    chain_key=ck,
+                ))
+            if self._items_cache is not None:
+                self._items_cache.extend(inserted)
+            return inserted
+
     def menu_fetched_at(self, res_url: str) -> float | None:
         canonical = canonical_res_url(res_url)
         with self._lock:

@@ -280,3 +280,25 @@ def test_tc9_reopen_sees_previous_data(tmp_path):
     assert len(items) == 1
     assert items[0].name == "Dish"
     store2.close()
+
+
+# ---- add_items: merge-insert without deleting ----
+
+def test_add_items_merges_without_deleting(tmp_path):
+    store = PoolStore(tmp_path / "pool.db")
+    zurl = "https://www.zomato.com/pune/test-res"
+    store.upsert_menu(make_menu("1", "Test Res", zurl, items=[
+        make_item("Biryani", "Mains", "Menu A", "", "nonveg", "https://b.zmtcdn.com/a.jpg", "1", "Test Res", zurl, "pune"),
+    ]))
+    surl = "https://www.swiggy.com/city/pune/vishal-rest9"
+    base = "https://media-assets.swiggy.com/swiggy/image/upload/"
+    first = [make_item(n, "", "Swiggy", "", "veg", base + n, "9", "Vishal", surl, "pune") for n in ("a", "b")]
+    added = store.add_items(make_menu("9", "Vishal", surl, items=first))
+    assert len(added) == 2
+    assert all(it.item_id > 0 for it in added)
+    assert {"a", "b", "Biryani"} <= {i.name for i in store.all_items()}
+
+    third = make_item("c", "", "Swiggy", "", "veg", base + "c", "9", "Vishal", surl, "pune")
+    added = store.add_items(make_menu("9", "Vishal", surl, items=first + [third]))
+    assert [it.name for it in added] == ["c"]
+    assert {i.name for i in store.all_items()} == {"Biryani", "a", "b", "c"}
