@@ -151,6 +151,20 @@ def test_settings_roundtrip_and_validation(tmp_path):
     assert r4.json()["detail"] == "That doesn't look like an ImgBB key"
 
 
+def test_settings_save_keeps_hand_added_gemini_key(tmp_path):
+    app, _, config_path = make_app(tmp_path)
+    client = TestClient(app)
+    gemini_key = "AIza" + "g" * 35
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps({"imgbb_keys": [], "gemini_key": gemini_key}), encoding="utf-8")
+
+    r = client.put("/api/settings", json={"imgbb_keys": [{"label": "One", "key": "a" * 32}]})
+
+    assert r.status_code == 200
+    assert gemini_key not in r.text
+    assert json.loads(config_path.read_text(encoding="utf-8"))["gemini_key"] == gemini_key
+
+
 # ---- TC3 ----
 
 def test_menu_preview(tmp_path):

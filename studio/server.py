@@ -395,6 +395,7 @@ def create_app(engine_factory: Callable[[], Engine] | None = None, *, output_dir
             live_search=bool(body.get("live_search", current.live_search)),
             live_budget_menus=max(0, min(2000, int(body.get("live_budget_menus", current.live_budget_menus)))),
             default_city=str(body.get("default_city", current.default_city)).strip().lower(),
+            gemini_key=current.gemini_key,
         )
         save_settings(settings, config_path)
         return _settings_view(settings)

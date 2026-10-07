@@ -1,120 +1,98 @@
-# Menu Studio
+# Menu Studio — prod v0.1
 
-Menu Studio takes a vendor's menu Excel and turns it into ready-to-upload
-Amazon SmartBiz sheets, complete with the best-quality dish photo it can find
-on Zomato for every item — no photography needed for most dishes. It runs as
-a local web app (`app.py`) with five stages behind the scenes:
+Menu Studio turns a restaurant menu (a menu Excel, or photos of the menu) into ready-to-upload
+Amazon SmartBiz sheets, with a dish photo for every item it can find on Zomato and Swiggy.
+It runs as a local web app (`RUN_ME.bat`).
 
 ```
-YOUR MENU EXCEL
-      │
-      ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌──────────────┐
-│ 1. HARVEST  │──▶│  2. MATCH   │──▶│3. DOWNLOAD  │──▶│  4. UPLOAD  │──▶│   5. BUILD   │
-│ Zomato menus│   │ your dish = │   │ quality gate│   │ ImgBB      │   │ SmartBiz     │
-│ + dish pics │   │ which photo?│   │ + fallback  │   │ hosting    │   │ Excel files  │
-└─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘   └──────────────┘
+MENU PHOTOS ──▶ Gemini reads the menu ──┐   (CLI --menu-image, or the Gemini website prompt)
+MENU EXCEL ─────────────────────────────┤
+                                        ▼
+   MATCH (photo library) ─▶ SEARCH (Swiggy dish search, then Zomato) ─▶ CHECK (vision, logo OCR, Gemini AI check)
+        ─▶ PHOTOS ─▶ UPLOAD (ImgBB) ─▶ SHEETS
+                                        │
+   dishes with only a look-alike photo ─┴─▶ REVIEW list in the web app (approve, or search and pick)
 ```
+
+## What's new in v0.1
+
+- **Swiggy dish search** as a second photo source (one request returns 60–200 dish photos).
+- **Look-alike photos**: if the exact dish has no photo, the app tries more generic names
+  ("Green Chilli Paneer Pizza (Double Cheese)" → "Paneer Pizza"). These never go live on their own:
+  they wait in the **Review** list until you approve them.
+- **Review screen** in the job page: *Approve this photo*, *Approve all look-alikes*, or type a name,
+  **Search photos** and *Use this photo*.
+- **Menu photos → menu sheet with Gemini** (free tier): `zomato_scrapper.py --menu-image`, or the
+  copy-paste prompt in [GEMINI_PROMPT.md](GEMINI_PROMPT.md) for the Gemini website.
+- **Gemini dish helper + AI photo check** (when a Gemini key is saved): fills diet and look-alike names
+  for Excel menus, and checks candidate photos — rejecting wrong dishes, watermarks, logos and text.
+- Optional **Diet** and **Photo Names** columns in the menu Excel.
+- Matching fixes: "Uthappa" spellings, serving words like "(Family)", "(Single Piece)", dishes whose
+  type comes from the section name ("Tandoori Chicken" in "Tandoori Kebabs"), mocktails, and exact
+  one-word dishes like "Palak".
+
+Measured on real menus (live dry runs): Vithai 45/71 → 61/71 with a photo before the spelling fixes;
+Hotel Rajlaxmi (286 dishes from 10 photos) → 286/286 with a photo after review (272 exact automatically).
 
 ## Use it
 
-1. On the GitHub repo page, click the green **Code** button → **Download
-   ZIP** → extract it somewhere convenient (a OneDrive folder or a path with
-   spaces is fine).
-2. Double-click **`RUN_ME.bat`**.
-   - **First time:** it downloads a private Python and the libraries it
-     needs, then opens Menu Studio in your browser automatically. This takes
-     **3-8 minutes** and needs about **1.5 GB of free disk space** (for the
-     one-time setup plus the visual-check model). Nothing is installed
-     system-wide and no admin rights are required.
-   - **Every time after:** it starts in a few seconds. If Menu Studio is
-     already running, double-clicking again just opens it in your browser.
-3. In the app: type the vendor name, upload the menu Excel, add your ImgBB
-   key(s), and click **Run pipeline**.
+1. Double-click **`RUN_ME.bat`** (first time: 3–8 minutes of one-time setup).
+2. In **Settings** add your **ImgBB key(s)** (free, https://api.imgbb.com/).
+3. Optional but recommended — a **free Gemini API key** (https://aistudio.google.com/apikey):
+   in v0.1 add it to `config\settings.json` as `"gemini_key": "<your key>"` (next to `imgbb_keys`),
+   then restart the app. (A Settings field for it is coming in the next version.)
+4. **New job**: type the restaurant name and upload the menu Excel
+   (Item Name | Category | Description | Price, optional Diet | Photo Names).
+   Have only photos? Use the Gemini website prompt ([GEMINI_PROMPT.md](GEMINI_PROMPT.md)) or the CLI below.
+5. Press **Run**. When it finishes, filter **Review** to approve look-alike photos, or search and pick
+   better ones for any dish. Then download the **Upload-ready sheet**.
 
-If anything goes wrong, `RUN_ME.bat` prints a plain-English message and
-waits for a key so you can read it — see **Troubleshooting** below.
+### Menu photos from the command line
 
-## Settings: ImgBB keys
+```bash
+python zomato_scrapper.py --menu-image page1.jpg page2.jpg --vendor "Hotel Name" --city pune --out outputs\hotel
+```
 
-Menu Studio hosts dish photos on [ImgBB](https://api.imgbb.com/) (free)
-before writing their URLs into the SmartBiz sheet.
+This needs `gemini_key` in `config\settings.json`. It writes `menu_extract.xlsx` (check it!) and then
+runs the whole pipeline on it.
 
-1. Go to https://api.imgbb.com/, sign up, and copy your free API key.
-2. In Menu Studio's settings, add **2-4 keys** (from your own account or
-   teammates' accounts).
-3. Why more than one: ImgBB free keys are rate-limited; a large menu run
-   uploads many photos, and having several keys lets the app spread uploads
-   across them instead of stalling on one.
+## Statuses
 
-## Your menu Excel
+| Status | Meaning | What to do |
+|---|---|---|
+| Ready | Photo of the exact dish, checked | Nothing — it is in the UPLOAD_READY sheet |
+| Review look-alike | Photo of a very similar dish | Approve it, or search and pick another |
+| Needs photo | Nothing suitable found | Search with a simpler name, or ask the owner for a photo |
+| Needs price | Photo found but no price | Add the price |
 
-The app reads whichever columns exist and figures out the closest match to:
+Review and Needs-photo dishes stay in the PENDING sheet until fixed.
 
-| Column | Notes |
-| --- | --- |
-| Item Name | required |
-| Category | maps to the SmartBiz Product Category |
-| Description | optional |
-| Price | optional — blank prices are fine, the dish still gets matched and photographed |
+## Gemini free tier — limits
 
-Headers are matched flexibly (e.g. "Dish", "Item", "Product Name" all work
-for the name column), so you rarely need to rename anything before
-uploading.
-
-## What you get
-
-After a run, in `outputs/<job>/` you get:
-
-- **`*_SmartBiz_UPLOAD_READY.xlsx`** — dishes with a confirmed photo,
-  formatted for direct SmartBiz bulk upload.
-- **`*_SmartBiz_PENDING.xlsx`** — dishes the app could not confidently
-  photograph (no price, no safe photo match, etc.) — fill these in by hand.
-- **Photo Report + owner checklist** — a page listing every matched photo
-  next to the dish name, so the restaurant owner can eyeball and approve (or
-  flag) picks before anything goes live.
+The free Gemini API has a small daily quota (about 20 requests per model per day for the newest Flash
+model). The app falls back across several free Flash models, caches answers, and needs roughly
+2–8 requests per menu. The quota resets around **12:30 PM India time**. When it runs out, use the
+Gemini website prompt. On the free tier Google may use what you send to improve its products —
+menus are public, but don't send anything private.
 
 ## How accuracy works
 
-- The app first tries the vendor's **own Zomato listing and any known chain
-  menus**, then falls back to a **whole-Zomato live search across ~20
-  cities** for the same dish.
-- Matching uses strict rules (word-by-word fuzzy matching, category checks,
-  non-veg/veg safety, one photo per dish) so a look-alike dish from a
-  different cuisine is not picked by accident.
-- Every candidate photo also goes through a **visual check** (and an OCR
-  brand guard that skips any photo showing a Zomato, Swiggy, or other
-  delivery-chain logo).
-- The app **never guesses a wrong photo on purpose** — if it isn't
-  confident, the dish goes to the `_PENDING` sheet and the owner checklist
-  instead of getting a bad photo.
+- Exact dish first: the vendor's own Zomato menu, the local photo library, Swiggy dish search,
+  then Zomato restaurant menus across many cities.
+- Strict name rules (diet, protein, dish type, ingredients) decide what counts as the same dish.
+- Look-alike names (from the menu sheet, Gemini, or built-in rules) are tried only when the exact dish
+  has no photo — and those photos need your approval.
+- Every photo is screened by CLIP vision, an OCR logo check for Zomato/Swiggy/chain branding, and —
+  with a Gemini key — an AI check that also catches wrong dishes, watermarks and non-English logos.
 
 ## Troubleshooting
 
-- **The black window flashes and closes** — double-click `RUN_ME.bat` again;
-  it now pauses on every failure so you can read the message. If it still
-  closes instantly, run it from a Command Prompt (`RUN_ME.bat`) to see the
-  full output.
-- **"Port busy" / app won't start** — another program is using the port;
-  close it and double-click `RUN_ME.bat` again.
-- **No internet during the first run** — the one-time setup needs to
-  download Python and libraries (~400 MB) plus a visual-check model
-  (~600 MB); connect to the internet and try again.
-- **Antivirus warnings** — the setup script downloads `uv` (a small,
-  official Python installer tool) from GitHub; if your antivirus blocks it,
-  allow `scripts\setup.ps1` and `RUN_ME.bat`, or ask IT to allowlist them.
-- **"Visual check needs the Microsoft VC++ runtime" / "Logo check
-  unavailable"** — the photo checks need the Microsoft Visual C++ runtime.
-  `RUN_ME.bat` installs it for you (click Yes when Windows asks to install a
-  Microsoft component). If that was skipped, install
-  https://aka.ms/vs/17/release/vc_redist.x64.exe and run `RUN_ME.bat` again.
-  Until then the app matches dishes by name only and skips photos from big
-  chains.
-- **"Zomato is limiting requests"** — Zomato is rate-limiting this network;
-  wait a while and re-run, or try from a different connection.
-- **Reset everything** — close the app, delete the folder
-  `%LOCALAPPDATA%\MenuStudio`, and double-click `RUN_ME.bat` again for a
-  clean first-time setup.
+- **"The free Gemini quota is used up"** — wait until about 12:30 PM India time, or use the Gemini website prompt.
+- **"Your Gemini key was rejected"** — create a new key at aistudio.google.com/apikey.
+- **"Swiggy/Zomato is limiting requests"** — the job continues with what it found; re-run later.
+- **The black window flashes and closes** — double-click `RUN_ME.bat` again; it pauses on errors.
+- **"Visual check needs the Microsoft VC++ runtime"** — install https://aka.ms/vs/17/release/vc_redist.x64.exe and run `RUN_ME.bat` again.
+- **Reset everything** — close the app, delete `%LOCALAPPDATA%\MenuStudio`, run `RUN_ME.bat`.
 
 ## For developers
 
@@ -125,24 +103,11 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-CLI usage (no web UI):
-
-```bash
-python zomato_scrapper.py --menu-excel "Menu.xlsx" --vendor "Vendor Name" ^
-    --sku-prefix HFC --out ./outputs
-```
-
-Other tools:
-
-- `tools/build_seed_pool.py` — crawl Zomato and (re)build the baked photo
-  pool used for offline matching (`--crawl`, `--cities`, `--cuisines`,
-  `--export`).
-- `tools/eval_menus.py` — run the pipeline against a folder of real menu
-  Excels and report per-dish accuracy, used to catch regressions before a
-  release.
+- `zomato_scrapper.py` — headless CLI (`--menu-excel` or `--menu-image`).
+- `tools/eval_menus.py` — dry-run a folder of menus and produce contact sheets for auditing.
+- `tools/build_seed_pool.py` — rebuild the baked photo pool.
+- `.orchestrator/` — the plan, task briefs and ledger of how v0.1 was built (orchestrate kit in `.claude/`).
 
 ## Never commit
 
-- `config/` (local settings, API keys)
-- `outputs/` (per-run results)
-- vendor menu Excels
+- `config/` (settings and API keys), `outputs/`, `eval/`, vendor menus.
