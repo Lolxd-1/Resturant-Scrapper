@@ -8,11 +8,13 @@ import logging
 import numpy as np
 from PIL import Image
 
+from studio.swiggy import IMG_BASE
 from studio.zomato import Http
 
 log = logging.getLogger("studio.imaging")
 
 THUMB_SUFFIX = "?fit=around%7C300%3A300&crop=300%3A300%3B%2A%2C%2A"
+_SWIGGY_THUMB = "fl_lossy,f_auto,q_auto,w_300,h_300,c_fill/"
 
 _MIN_VALID_SIDE = 200
 _MAX_ASPECT = 2.2
@@ -32,8 +34,19 @@ def _safe_get_ex(url: str, http: Http) -> tuple[object | None, str]:
         return None, "network"
 
 
+def full_url(url: str) -> str:
+    return url.split("?", 1)[0]
+
+
+def thumb_url(url: str) -> str:
+    base = full_url(url)
+    if base.startswith(IMG_BASE):
+        return IMG_BASE + _SWIGGY_THUMB + base[len(IMG_BASE):]
+    return base + THUMB_SUFFIX
+
+
 def fetch_thumb_ex(url: str, http: Http) -> tuple[bytes | None, str]:
-    resp, reason = _safe_get_ex(url.split("?", 1)[0] + THUMB_SUFFIX, http)
+    resp, reason = _safe_get_ex(thumb_url(url), http)
     if resp is None:
         return None, reason
     content = resp.content
@@ -68,7 +81,7 @@ def validate_photo(img: Image.Image) -> str | None:
 def fetch_full_ex(
     url: str, http: Http, min_side: int = 400, max_side: int = 1600
 ) -> tuple[tuple[bytes, tuple[int, int]] | None, str]:
-    resp, reason = _safe_get_ex(url.split("?", 1)[0], http)
+    resp, reason = _safe_get_ex(full_url(url), http)
     if resp is None:
         return None, reason
     content = resp.content

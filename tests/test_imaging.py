@@ -8,7 +8,10 @@ from PIL import Image
 
 import requests
 
-from studio.imaging import THUMB_SUFFIX, fetch_full, fetch_full_ex, fetch_thumb, sha256
+from studio.imaging import (
+    THUMB_SUFFIX, fetch_full, fetch_full_ex, fetch_thumb, fetch_thumb_ex, full_url, sha256, thumb_url,
+)
+from studio.swiggy import IMG_BASE
 from studio.zomato import Http
 from tests.conftest import FakeResponse
 
@@ -132,3 +135,20 @@ def test_fix2_tc3_fetch_full_ex_404_is_http(fake_session):
 
 def test_tc7_sha256_known_digest():
     assert sha256(b"abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+
+# ---- host-aware URLs (Zomato + Swiggy) ----
+
+def test_thumb_and_full_url_for_both_hosts():
+    z = "https://b.zmtcdn.com/data/dish/x.jpg?fit=1"
+    assert full_url(z) == "https://b.zmtcdn.com/data/dish/x.jpg"
+    assert thumb_url(z) == "https://b.zmtcdn.com/data/dish/x.jpg" + THUMB_SUFFIX
+    s = IMG_BASE + "abc/def.jpg"
+    assert full_url(s) == s
+    assert thumb_url(s) == IMG_BASE + "fl_lossy,f_auto,q_auto,w_300,h_300,c_fill/abc/def.jpg"
+
+
+def test_fetch_thumb_ex_requests_swiggy_thumb_url(fake_session):
+    fake_session.add(IMG_BASE, FakeResponse(200, content=image_bytes((300, 300))))
+    fetch_thumb_ex(IMG_BASE + "abc", make_http(fake_session))
+    assert fake_session.calls[0][0] == IMG_BASE + "fl_lossy,f_auto,q_auto,w_300,h_300,c_fill/abc"

@@ -113,7 +113,7 @@ class Http:
         self._last_request: dict[str, float] = {}
 
     def _throttle(self, host: str) -> None:
-        interval = self.min_interval / 4 if host == "b.zmtcdn.com" else self.min_interval
+        interval = self.min_interval / 4 if host in ("b.zmtcdn.com", "media-assets.swiggy.com") else self.min_interval
         with self._lock:
             now = self.clock()
             last = self._last_request.get(host)
