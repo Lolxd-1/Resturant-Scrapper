@@ -15,3 +15,5 @@
 - 2026-10-07T14:17:44Z Ruling: machine has 7.3 GB RAM (0.4 free with 2 suites) -> parallel full-suite verifies cause MemoryError/timing failures; from now on gates run sequentially on a quiet machine and no parallel executor waves — cost if wrong: slower wall-clock only
 - 2026-10-07T14:17:44Z B1 DONE_WITH_CONCERNS: verify failed only on load-sensitive test_sheets tc8 (MemoryError/speed); gemini+config tests pass. Gate later, sequentially
 - 2026-10-07T14:31:13Z wave5 merged (A6 B1 L1 gates PASS sequentially), verify-all 456 passed. Vithai A5 audit: 53 ready, 0 wrong (3 text-overlay photos -> judge). dispatch B1 review + B2
+- 2026-10-07T14:32:46Z B1 review APPROVE (6 minors deferred). Eval A5 analysis: Swiggy cap 300 exhausted depth-first on 226-dish menu; option variants '(with Mayo)' needlessly review -> brief P1 (breadth-first, cap 600, option_rung) before B3; B3 Notes: option rung + AI same -> ready
+- 2026-10-07T14:37:54Z B2 gate PASS (462). dispatch P1
