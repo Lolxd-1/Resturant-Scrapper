@@ -184,6 +184,37 @@ def size_base_key(name: str) -> str:
         key = stripped
 
 
+_DISPLAY = {
+    "FRIEDRICE": "fried rice", "PAVBHAJI": "pav bhaji", "VADAPAV": "vada pav",
+    "COLDCOFFEE": "cold coffee", "ICECREAM": "ice cream", "GARLICBREAD": "garlic bread",
+    "SPRINGROLL": "spring roll", "MASALAPAPAD": "masala papad", "MASALADOSA": "masala dosa",
+    "SABUDANAKHICHDI": "sabudana khichdi", "DALKHICHDI": "dal khichdi", "BOILEDEGG": "boiled egg",
+    "BUNMASKA": "bun maska", "PERIPERI": "peri peri", "ICEDTEA": "iced tea", "MIXVEG": "mix veg",
+}
+
+
+def lookalike_names(name: str) -> list[str]:
+    """Up to two more generic names whose photo would look like this dish, most specific first."""
+    names: list[str] = []
+    main = " ".join(_PAREN_RE.sub(" ", name).split())
+    if main and size_base_key(main) != size_base_key(name):
+        names.append(main)
+    toks = _tokens(main, fallback=False)
+    if not any(t in HEADS for t in toks):
+        return names
+    keep = [t for t in toks if t in HEADS or token_role(t) in ("base", "protein")]
+    if keep == toks:
+        return names
+    words = [_DISPLAY.get(t, t.lower()) for t in keep]
+    padded = f" {normalize(name)} "
+    if not any(token_role(t) == "protein" for t in keep) and " veg " in padded             and " non veg " not in padded and " nonveg " not in padded:
+        words.insert(0, "veg")
+    core = " ".join(w.title() for w in " ".join(words).split())
+    if size_base_key(core) not in {size_base_key(name), *(size_base_key(n) for n in names)}:
+        names.append(core)
+    return names
+
+
 def _is_alias(toks: list[str]) -> bool:
     roles = [token_role(t) for t in toks]
     if "head" in roles or "protein" in roles or sum(r in ("visual", "base") for r in roles) >= 2:

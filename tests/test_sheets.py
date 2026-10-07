@@ -284,4 +284,33 @@ def test_build_outputs_file_names(tmp_path):
     assert paths["ready"].name == "My_Vendor_SmartBiz_UPLOAD_READY.xlsx"
     assert paths["pending"].name == "My_Vendor_SmartBiz_PENDING.xlsx"
     assert paths["report"].name == "My_Vendor_Photo_Report.xlsx"
-    assert set(STATUS_LABELS) == {"ready", "needs_photo", "needs_price", "error"}
+    assert set(STATUS_LABELS) == {"ready", "review", "needs_photo", "needs_price", "error"}
+
+
+def test_a4_review_rows_go_to_pending_and_report(tmp_path):
+    template = make_template(tmp_path / "template.xlsx")
+    results = [
+        mk(1, "SKU-001", "Dish1", status="ready", hosted_url="https://i.ibb.co/1.jpg", confidence=0.9),
+        mk(2, "SKU-002", "Dish2", status="review", hosted_url="https://i.ibb.co/2.jpg",
+           lookalike=True, search_name="Paneer Pizza"),
+    ]
+    paths = build_outputs(results, template, tmp_path / "out", vendor="Acme")
+
+    ready = openpyxl.load_workbook(paths["ready"])["bulk_upload_template"]
+    assert [ready.cell(row=r, column=4).value for r in range(1, ready.max_row + 1)].count("Dish2") == 0
+    pending = openpyxl.load_workbook(paths["pending"])["bulk_upload_template"]
+    assert "Dish2" in [pending.cell(row=r, column=4).value for r in range(1, pending.max_row + 1)]
+
+    wb = openpyxl.load_workbook(paths["report"])
+    dishes = wb["Dishes"]
+    assert dishes.cell(row=3, column=5).value == "Review look-alike"
+    assert dishes.cell(row=3, column=dishes.max_column).value == "Paneer Pizza"
+    summary = wb["Summary"]
+    vals = {row[0].value: row[1].value for row in summary.iter_rows(min_row=1, max_row=summary.max_row)}
+    assert vals["Look-alikes to review"] == 1
+
+
+def test_a4_dish_result_from_old_dict_defaults():
+    from studio.models import dish_result_from_dict
+    r = dish_result_from_dict({"row": 1, "sku": "S", "name": "N", "category": "", "description": "", "price": 1.0})
+    assert (r.diet, r.photo_names, r.search_name, r.lookalike, r.approved) == ("", [], "", False, False)

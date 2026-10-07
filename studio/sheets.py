@@ -15,6 +15,7 @@ from studio.models import DishResult
 
 STATUS_LABELS = {
     "ready": "Ready",
+    "review": "Review look-alike",
     "needs_photo": "Needs owner photo",
     "needs_price": "Needs price",
     "error": "Error",
@@ -23,8 +24,9 @@ STATUS_LABELS = {
 DISHES_HEADER = [
     "SKU", "Dish", "Category", "Price", "Status", "Reason", "Confidence",
     "Match", "Source", "Zomato item", "Restaurant", "Restaurant link", "Photo link",
+    "Photo searched as",
 ]
-DISHES_WIDTHS = [14, 38, 16, 12, 16, 40, 12, 12, 12, 18, 18, 30, 30]
+DISHES_WIDTHS = [14, 38, 16, 12, 16, 40, 12, 12, 12, 18, 18, 30, 30, 22]
 
 _TEMPLATE_COLUMNS = (3, 4, 5, 6, 7, 8, 9, 16)  # C,D,E,F,G,H,I,P
 
@@ -91,6 +93,7 @@ def _write_summary(ws: Worksheet, results: list[DishResult], vendor: str, vision
                    logo_on: bool) -> None:
     total = len(results)
     ready_n = sum(1 for r in results if r.status == "ready")
+    review_n = sum(1 for r in results if r.status == "review")
     needs_photo_n = sum(1 for r in results if r.status == "needs_photo")
     needs_price_n = sum(1 for r in results if r.status == "needs_price")
     error_n = sum(1 for r in results if r.status == "error")
@@ -102,6 +105,7 @@ def _write_summary(ws: Worksheet, results: list[DishResult], vendor: str, vision
         ("Generated", datetime.now().strftime("%d %b %Y %H:%M")),
         ("Dishes in menu", total),
         ("Ready to upload", ready_n),
+        ("Look-alikes to review", review_n),
         ("Need owner photo", needs_photo_n),
         ("Need price", needs_price_n),
         ("Errors", error_n),
@@ -134,6 +138,7 @@ def _write_dishes(ws: Worksheet, results: list[DishResult]) -> None:
             _clean(r.restaurant),
             None,
             None,
+            _clean(r.search_name),
         ]
         ws.append(row)
         out_row = ws.max_row

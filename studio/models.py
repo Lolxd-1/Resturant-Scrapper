@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass, field, fields
 
 TIERS = ("exact", "strong", "close", "reject")
 DIETS = ("veg", "egg", "nonveg", "unknown")
-STATUSES = ("ready", "needs_photo", "needs_price", "error")
-SOURCES = ("own", "chain", "pool", "live", "")
+STATUSES = ("ready", "review", "needs_photo", "needs_price", "error")
+SOURCES = ("own", "chain", "pool", "live", "swiggy", "")
 
 
 @dataclass
@@ -105,6 +105,7 @@ class Candidate:
     food_ok: bool | None = None
     final: float = 0.0
     source: str = "pool"              # one of SOURCES
+    rung: int = 0                     # look-alike ladder step that found it, 0 = exact name
 
 
 @dataclass
@@ -128,6 +129,11 @@ class DishResult:
     image_size: str = ""              # "WxH"
     hosted_url: str = ""
     alternates: list[dict] = field(default_factory=list)   # {"item_name","restaurant","restaurant_url","zomato_img","tier","confidence","source"}
+    diet: str = ""                    # "veg" | "nonveg" | "egg" | ""
+    photo_names: list[str] = field(default_factory=list)   # look-alike names tried, most specific first
+    search_name: str = ""             # look-alike name whose photo is used / last searched
+    lookalike: bool = False           # photo shows a look-alike, not the exact dish
+    approved: bool = False            # user approved the look-alike photo
 
 
 def dish_result_to_dict(r: DishResult) -> dict:

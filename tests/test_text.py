@@ -201,3 +201,19 @@ def test_s1_tc6_devanagari_dish_is_read():
     assert parse_dish("x", display="Vendor Name").display == "Vendor Name"
     assert parse_dish("Paneer Masala", "Shakahari Danka").diet == "veg"
     assert parse_dish("Special Thali", "Mansahari Thali").diet == "nonveg"
+
+
+def test_a4_lookalike_names():
+    from studio.text import lookalike_names
+    assert lookalike_names("Green Chilli Paneer Pizza (Single Cheese)") == ["Green Chilli Paneer Pizza", "Paneer Pizza"]
+    assert lookalike_names("Shubham Special Veg Thali") == ["Veg Thali"]
+    assert lookalike_names("Veg Supreme Burger (with Cheese)") == ["Veg Supreme Burger", "Veg Burger"]
+    assert lookalike_names("Chilli Garlic Chicken Pizza (Regular)") == ["Chicken Pizza"]
+    assert lookalike_names("Cadbury Brownie") == ["Brownie"]
+    assert lookalike_names("Fish Roast (Macchi Roast - 2 Pieces)") == ["Fish Roast"]
+
+
+def test_a4_lookalike_names_nothing_to_drop():
+    from studio.text import lookalike_names
+    for name in ("Masala Dosa", "Paneer Pizza", "Honey Chilli Potato Cheese", "Soyabean Fried Rice", ""):
+        assert lookalike_names(name) == []
