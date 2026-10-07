@@ -190,7 +190,7 @@ class Speller:
         splits += [[word[:i], word[i:j], word[j:]] for i in range(3, n - 5) for j in range(i + 3, n - 2)]
         for parts in splits:
             dfs = [part_df(p) for p in parts]
-            if None in dfs:
+            if None in dfs or any(len(p) < 4 and p not in MISSPELLINGS and p not in self._lexicon for p in parts):
                 continue
             rank = (-len(parts), min(dfs))
             if best is None or rank > best[:2]:

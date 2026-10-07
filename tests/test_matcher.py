@@ -351,3 +351,20 @@ def test_perf_400k_index():
 def test_category_head_and_mocktail(dish, item_name, item_cat, diet, tiers):
     item = make_item(item_name, item_cat, diet)
     assert score(parse_dish(*dish), item, PoolIndex([item]).idf).tier in tiers
+
+
+def test_l1_exact_single_token_item_survives_retrieve_ties():
+    items = [make_item(f"Palak Dish{i}", "Main Course", "veg", i) for i in range(700)]
+    items.append(make_item("Palak", "Main Course", "veg", 700))
+    # filler keeps "palak" under the common-token share so it is retrievable at all
+    items += [make_item(f"Rice Bowl{i}", "Main Course", "veg", 1000 + i) for i in range(2200)]
+    index = PoolIndex(items)
+    q = parse_dish("Palak", "Vegetarian Main Course")
+    assert any(it.name == "Palak" for it in index.retrieve(q))
+    first = rank(q, index.retrieve(q), index.idf)[0]
+    assert first.item.name == "Palak" and first.score.tier == "exact"
+
+
+def test_l1_onion_uthappa_matches_onion_uttapam():
+    item = make_item("Onion Uttapam", "South Indian", "veg")
+    assert score(parse_dish("Onion Uthappa", "Uthappa"), item, PoolIndex([item]).idf).tier == "exact"
