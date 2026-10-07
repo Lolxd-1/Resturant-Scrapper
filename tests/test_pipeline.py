@@ -944,6 +944,7 @@ def test_a5_tc1_lookalike_photo_goes_to_review(tmp_path):
 
     r = env.results()[LOOKALIKE_DISH]
     assert r["status"] == "review" and r["lookalike"] is True and r["search_name"] == "Paneer Pizza"
+    assert r["photo_names"] == ["Green Chilli Paneer Pizza", "Paneer Pizza"]
     assert r["reason"] == "Look-alike photo (Paneer Pizza) — approve it or search again"
     assert r["local_image"] and (tmp_path / "job1" / r["local_image"]).is_file()
     assert r["hosted_url"] == "" and env.posts == []
@@ -1061,6 +1062,7 @@ def test_a5_tc7_search_photos_then_choose(tmp_path):
 
     assert r.search_name == "Veg Thali"
     assert any(a["item_name"] == "Veg Thali" and a["rung"] >= 1 for a in r.alternates)
+    assert all(a["confidence"] > 0 for a in r.alternates)
     assert r.zomato_img == first["zomato_img"] and r.status == first["status"]
     assert env.results()["Shubham All-in-One Thali"]["alternates"] == r.alternates
     with pytest.raises(ValueError, match="Type a dish name to search for"):
@@ -1069,3 +1071,48 @@ def test_a5_tc7_search_photos_then_choose(tmp_path):
     chosen = choose_alternate(engine, job_dir, "TC-001", 0, env.uploader)
 
     assert chosen.status == "ready" and chosen.approved is True and chosen.lookalike is True
+
+
+# ---- A5 round 1 ----
+
+def test_a5_r1_rerun_keeps_approved_lookalike(tmp_path):
+    env = Env(tmp_path)
+    _lookalike_job(env)
+    approve_dishes(env.engine(), tmp_path / "job1", ["TC-001"], env.uploader)
+    hosted = env.results()[LOOKALIKE_DISH]["hosted_url"]
+
+    summary = env.run(tmp_path / "menu.xlsx", JobOptions(vendor="Test Cafe", live_search=False))
+
+    r = env.results()[LOOKALIKE_DISH]
+    assert r["status"] == "ready" and r["approved"] is True and r["reason"] == ""
+    assert r["lookalike"] is True and r["search_name"] == "Paneer Pizza"
+    assert r["hosted_url"] == hosted and len(env.posts) == 1 and summary["ready"] == 1
+
+
+def test_a5_r1_choose_back_keeps_lookalike_state(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    env.run(env.menu([["Paneer Pizza", "Pizza", "", 199]]), JobOptions(vendor="Test Cafe", live_search=False),
+            upload=False)
+    job_dir, engine = tmp_path / "job1", env.engine()
+    search_photos(engine, job_dir, "TC-001", "Paneer Pizza")
+
+    picked = choose_alternate(engine, job_dir, "TC-001", 0, None)
+    assert picked.lookalike is True and picked.search_name == "Paneer Pizza"
+
+    back = choose_alternate(engine, job_dir, "TC-001", 0, None)
+    assert back.lookalike is False and back.search_name == ""
+    assert back.alternates[0]["rung"] == 1
+
+    again = choose_alternate(engine, job_dir, "TC-001", 0, None)
+    assert again.lookalike is True
+
+
+def test_a5_r1_approve_missing_photo_file(tmp_path):
+    env = Env(tmp_path)
+    _lookalike_job(env)
+    (tmp_path / "job1" / env.results()[LOOKALIKE_DISH]["local_image"]).unlink()
+
+    with pytest.raises(ValueError, match="Photo file missing for TC-001; search again"):
+        approve_dishes(env.engine(), tmp_path / "job1", ["TC-001"], env.uploader)
+    assert env.posts == []

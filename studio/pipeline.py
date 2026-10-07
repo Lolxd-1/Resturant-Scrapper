@@ -6,6 +6,7 @@ import logging
 import math
 import re
 import shutil
+import string
 import threading
 import time
 from collections import Counter
@@ -264,6 +265,7 @@ def _pick_dict(r: DishResult) -> dict:
     return {
         "item_name": r.item_name, "restaurant": r.restaurant, "restaurant_url": r.restaurant_url,
         "zomato_img": r.zomato_img, "tier": r.tier, "confidence": r.confidence, "source": r.source,
+        "rung": int(r.lookalike),
     }
 
 
@@ -570,7 +572,8 @@ class _Run:
             if row.diet:
                 q = replace(q, diet=row.diet)
             rungs: list[DishQuery] = []
-            for name in row.photo_names or lookalike_names(fixed):
+            # Names derived from the speller's lower-case text are shown in Title Case.
+            for name in row.photo_names or [string.capwords(n) for n in lookalike_names(fixed)]:
                 rq = parse_dish(speller.fix_text(name), category, "", display=name)
                 if row.diet:
                     rq = replace(rq, diet=row.diet)
@@ -968,6 +971,7 @@ class _Run:
                and (self.job_dir / o.local_image).is_file() for o, r in zip(old, g.rows)):
             for o, r in zip(old, g.rows):
                 r.local_image, r.image_size, r.hosted_url = o.local_image, o.image_size, o.hosted_url
+                r.approved, r.lookalike, r.search_name, r.reason = o.approved, o.lookalike, o.search_name, o.reason
             g.resumed = True
             return
         first = g.rows[0]
@@ -1116,6 +1120,8 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
             r.item_name, r.restaurant, r.restaurant_url = alt["item_name"], alt["restaurant"], alt["restaurant_url"]
             r.zomato_img, r.tier, r.confidence, r.source = alt["zomato_img"], alt["tier"], alt["confidence"], alt["source"]
             r.approved, r.lookalike = True, bool(alt.get("rung"))
+            if not r.lookalike:
+                r.search_name = ""
             r.local_image = f"images/{sku}.jpg"
             r.image_size = f"{w}x{h}"
             (job_dir / r.local_image).write_bytes(jpeg)
@@ -1172,6 +1178,8 @@ def search_photos(engine: Engine, job_dir: Path, sku: str, query: str) -> DishRe
             pass
         cands = _rank_pool(engine, q)
     top = cands[:8]
+    for c in top:
+        c.final = c.score.text
 
     with job_lock(job_dir):
         data = json.loads(results_file.read_text(encoding="utf-8"))
@@ -1200,6 +1208,8 @@ def approve_dishes(engine: Engine, job_dir: Path, skus: list[str], uploader: Upl
                 results.append(r)
                 if r.status != "review":
                     continue
+                if not (job_dir / r.local_image).is_file():
+                    raise ValueError(f"Photo file missing for {r.sku}; search again")
                 if upload:
                     if uploader is None:
                         raise ValueError(NO_KEY_MESSAGE)
