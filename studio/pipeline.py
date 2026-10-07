@@ -80,7 +80,7 @@ GROUP_CATEGORY = {
 
 BLOCKED_MESSAGE = "Zomato is limiting requests from this PC; continuing with photos already found."
 SWIGGY_BLOCKED_MESSAGE = "Swiggy is limiting requests from this PC; continuing without it."
-SWIGGY_MAX_REQUESTS = 300
+SWIGGY_MAX_REQUESTS = 600
 NO_KEY_MESSAGE = "No ImgBB API key saved. Add one in Settings."
 FALLBACK_CITIES = ("pune", "mumbai", "ncr", "bangalore")
 MAX_SOURCE_OUTLETS = 25
@@ -189,6 +189,7 @@ class _Group:
         self.key = key
         self.q = q
         self.rungs = [q, *rungs]  # rung 0 = the dish's own name, then its look-alike names
+        self.option_rung: int | None = None  # rung that is this dish without its bracketed option
         self.rows: list[DishResult] = []
         self.cands: list[Candidate] = []
         self.source = ""          # "own" / "chain" when picked from the vendor's own menus
@@ -587,6 +588,10 @@ class _Run:
             key = q.base_key or f"#{row.row}"
             if key not in by_key:
                 by_key[key] = _Group(key, q, rungs)
+                if "(" in row.name:
+                    plain = _query_text(row.name)
+                    by_key[key].option_rung = next(
+                        (i for i, rq in enumerate(by_key[key].rungs) if rq.base_key == plain), None)
                 self.groups.append(by_key[key])
             by_key[key].rows.append(r)
         self.say(f"Menu has {len(self.results)} dishes ({len(self.groups)} distinct)")
@@ -752,28 +757,40 @@ class _Run:
             self._blocked()
 
     def _swiggy_search(self, groups: list[_Group]) -> None:
-        """Swiggy dish search for each group's own name, then its look-alike names, until one is found."""
+        """Swiggy dish search one rung at a time: every open dish's own name before any look-alike name."""
         opts, engine = self.opts, self.engine
         cities = [c for c in dict.fromkeys([opts.city, "pune", "mumbai", "bangalore"]) if c in SWIGGY_CITIES][:2]
+        planned = sum(len(cities) + max(0, min(len(g.rungs), 3) - 1) for g in groups) or 1
         done: set[tuple[str, str]] = set()
+        open_groups = groups
         try:
-            for n, g in enumerate(groups):
-                self.check()
-                for i, rq in enumerate(g.rungs[:3]):
-                    for city in cities:
-                        key = (_query_text(rq.raw), city)
+            for i in range(3):
+                searching = [g for g in open_groups if i < len(g.rungs)]
+                capped = False
+                for city in cities[:2 if i == 0 else 1]:
+                    for g in searching:
+                        self.check()
+                        key = (_query_text(g.rungs[i].raw), city)
                         if key in done:
                             continue
                         if len(done) >= SWIGGY_MAX_REQUESTS:
-                            return
+                            capped = True
+                            break
                         done.add(key)
                         for menu in engine.swiggy.search_dishes(*key):
                             engine.add_items(menu)
-                    g.cands = self.ranked_group(g)
-                    if _confident(g.cands) or any(c.rung == i and c.score.tier in ("exact", "strong")
-                                                  for c in g.cands):
+                        self.stage("search", min(1.0, len(done) / planned))
+                    if capped:
                         break
-                self.stage("search", (n + 1) / len(groups))
+                still_open = []
+                for g in searching:
+                    g.cands = self.ranked_group(g)
+                    if not (_confident(g.cands) or any(c.rung <= i and c.score.tier in ("exact", "strong")
+                                                       for c in g.cands)):
+                        still_open.append(g)
+                if capped:
+                    return
+                open_groups = still_open
         except SwiggyBlocked:
             self.warnings.append(SWIGGY_BLOCKED_MESSAGE)
             self.say(SWIGGY_BLOCKED_MESSAGE)

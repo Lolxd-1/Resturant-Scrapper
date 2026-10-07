@@ -1116,3 +1116,61 @@ def test_a5_r1_approve_missing_photo_file(tmp_path):
     with pytest.raises(ValueError, match="Photo file missing for TC-001; search again"):
         approve_dishes(env.engine(), tmp_path / "job1", ["TC-001"], env.uploader)
     assert env.posts == []
+
+
+# ---- P1: Swiggy search breadth-first by rung, option rung ----
+
+def _swiggy_engine(env) -> Engine:
+    env.session.add(SEARCH_URL, FakeResponse(200, json.dumps({"statusCode": 1})))
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    return Engine(env.store, env.vision, env.http, swiggy=SwiggyClient(env.http))
+
+
+def _swiggy_queries(env) -> list[tuple[str, str]]:
+    return [(p["str"], p["lat"]) for url, p in env.session.calls if url == SEARCH_URL]
+
+
+def _look_alike_menu(env, dishes):
+    return env.menu([[name, "Pizza", "", 100, "", alt] for name, alt in dishes],
+                    header=[*HEADER, "Diet", "Photo Names"])
+
+
+P1_DISHES = [("Alpha Pizza", "Alpha Cheese"), ("Beta Pizza", "Beta Cheese"), ("Gamma Pizza", "Gamma Cheese")]
+
+
+def test_p1_tc1_rung_zero_names_searched_first(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    monkeypatch.setattr(pipeline, "SWIGGY_MAX_REQUESTS", 3)
+    menu = _look_alike_menu(env, P1_DISHES)
+
+    env.run(menu, JobOptions(vendor="Test Cafe", city="pune"), engine=_swiggy_engine(env), upload=False)
+
+    assert [q for q, _ in _swiggy_queries(env)] == ["alpha pizza", "beta pizza", "gamma pizza"]
+
+
+def test_p1_tc2_rung_zero_two_cities_then_one(tmp_path):
+    env = Env(tmp_path)
+    menu = _look_alike_menu(env, P1_DISHES[:1])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", city="pune"), engine=_swiggy_engine(env), upload=False)
+
+    queries = _swiggy_queries(env)
+    assert [q for q, _ in queries].count("alpha pizza") == 2
+    assert len({lat for q, lat in queries if q == "alpha pizza"}) == 2
+    assert [q for q, _ in queries].count("alpha cheese") == 1
+
+
+def test_p1_tc3_option_rung(tmp_path, monkeypatch):
+    env = Env(tmp_path)
+    seen: list[list] = []
+    monkeypatch.setattr(pipeline._Run, "_swiggy_search", lambda self, groups: seen.append(groups))
+    menu = env.menu([["Paneer Chilli Sandwich (with Mayo)", "Sandwich", "", 100],
+                     ["Paneer Pizza", "Pizza", "", 100]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", city="pune"), engine=_swiggy_engine(env), upload=False)
+
+    by_name = {g.rows[0].name: g for g in seen[0]}
+    sandwich = by_name["Paneer Chilli Sandwich (with Mayo)"]
+    assert sandwich.option_rung is not None
+    assert sandwich.rungs[sandwich.option_rung].base_key == "paneer chilli sandwich"
+    assert by_name["Paneer Pizza"].option_rung is None
