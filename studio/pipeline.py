@@ -10,11 +10,11 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from itertools import zip_longest
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Sequence
 
 import numpy as np
 from rapidfuzz import fuzz
@@ -38,7 +38,8 @@ from studio.models import (
 )
 from studio.spelling import Speller
 from studio.store import PoolStore
-from studio.text import normalize, parse_dish, size_base_key
+from studio.swiggy import SWIGGY_CITIES, SwiggyBlocked, SwiggyClient
+from studio.text import lookalike_names, normalize, parse_dish, size_base_key
 from studio.vision import (
     CLOSE_AGREE_MIN,
     FOOD_MIN_PROB,
@@ -77,6 +78,8 @@ GROUP_CATEGORY = {
 }
 
 BLOCKED_MESSAGE = "Zomato is limiting requests from this PC; continuing with photos already found."
+SWIGGY_BLOCKED_MESSAGE = "Swiggy is limiting requests from this PC; continuing without it."
+SWIGGY_MAX_REQUESTS = 300
 NO_KEY_MESSAGE = "No ImgBB API key saved. Add one in Settings."
 FALLBACK_CITIES = ("pune", "mumbai", "ncr", "bangalore")
 MAX_SOURCE_OUTLETS = 25
@@ -104,11 +107,12 @@ class JobCancelled(Exception):
 
 
 class Engine:
-    def __init__(self, store: PoolStore, vision: Vision, http: Http):
+    def __init__(self, store: PoolStore, vision: Vision, http: Http, swiggy: SwiggyClient | None = None):
         self.store = store
         self.vision = vision
         self.http = http
         self.client = ZomatoClient(http)
+        self.swiggy = swiggy          # None = Swiggy search disabled
         self.index = PoolIndex(store.all_items())
         self.blocked_until: float = 0.0
 
@@ -121,6 +125,11 @@ class Engine:
         self.index.add(self.store.items_for_restaurant(menu.url))
         return n
 
+    def add_items(self, menu: RestaurantMenu) -> int:
+        items = self.store.add_items(menu)
+        self.index.add(items)
+        return len(items)
+
 
 def build_engine(settings: Settings | None = None, *, allow_download: bool = True,
                  on_status: Callable[[str], None] | None = None) -> Engine:
@@ -130,7 +139,8 @@ def build_engine(settings: Settings | None = None, *, allow_download: bool = Tru
     store.ensure_seeded(SEED_POOL_PATH)
     status("Loading the visual check")
     vision = load_vision(models_dir(), allow_download=allow_download)
-    return Engine(store, vision, Http())
+    http = Http()
+    return Engine(store, vision, http, SwiggyClient(http))
 
 
 def new_job_id(vendor: str) -> str:
@@ -174,9 +184,10 @@ def _cuisines_for(q: DishQuery) -> tuple[str, ...]:
 class _Group:
     """Menu rows that share one photo decision (size variants of one dish)."""
 
-    def __init__(self, key: str, q: DishQuery):
+    def __init__(self, key: str, q: DishQuery, rungs: Sequence[DishQuery] = ()):
         self.key = key
         self.q = q
+        self.rungs = [q, *rungs]  # rung 0 = the dish's own name, then its look-alike names
         self.rows: list[DishResult] = []
         self.cands: list[Candidate] = []
         self.source = ""          # "own" / "chain" when picked from the vendor's own menus
@@ -245,6 +256,7 @@ def _cand_dict(c: Candidate) -> dict:
     return {
         "item_name": c.item.name, "restaurant": c.item.res_name, "restaurant_url": c.item.res_url,
         "zomato_img": c.item.img_url, "tier": c.score.tier, "confidence": round(c.final, 3), "source": c.source,
+        "rung": c.rung,
     }
 
 
@@ -261,7 +273,7 @@ def _summarize(results: list[DishResult], files: dict[str, Path], *,
     count = Counter(r.status for r in results)
     photos = sum(1 for r in results if r.local_image)
     return {
-        "total": total, "ready": count["ready"], "needs_photo": count["needs_photo"],
+        "total": total, "ready": count["ready"], "review": count["review"], "needs_photo": count["needs_photo"],
         "needs_price": count["needs_price"], "errors": count["error"],
         "coverage": round(photos / total, 3) if total else 0.0,
         "vision": vision,
@@ -277,6 +289,7 @@ def _apply_pick(r: DishResult, d: dict) -> None:
 
 
 def _confident(cands: list[Candidate]) -> bool:
+    cands = [c for c in cands if c.rung == 0]
     good = [c for c in cands if c.score.tier in ("exact", "strong")]
     return bool(good) and (len({c.item.res_url for c in good}) >= 2 or cands[0].score.tier == "exact")
 
@@ -286,10 +299,26 @@ def _settle(r: DishResult, upload: bool) -> None:
         return
     if r.local_image and r.price is None:
         r.status, r.reason = "needs_price", "Add a price, then upload"
+    elif r.local_image and r.lookalike and not r.approved:
+        r.status, r.reason = "review", r.reason or "Look-alike photo — approve it or search again"
     elif r.local_image and (r.hosted_url or not upload):
         r.status = "ready"
     else:
         r.status = "needs_photo"
+
+
+def _awaits_upload(r: DishResult) -> bool:
+    """Has a photo still to upload; an unapproved look-alike is never uploaded."""
+    return bool(r.local_image) and not r.hosted_url and not (r.lookalike and not r.approved)
+
+
+def _rank_pool(engine: Engine, q: DishQuery) -> list[Candidate]:
+    index, store = engine.index, engine.store
+    cands = [c for c in rank(q, index.retrieve(q), index.idf) if not store.is_bad_image(c.item.img_url)]
+    for c in cands:
+        if c.item.res_url.startswith("https://www.swiggy.com/"):
+            c.source = "swiggy"
+    return cands
 
 
 def _chain_sizes(items: list[PoolItem]) -> Counter:
@@ -484,11 +513,22 @@ class _Run:
             self.emit({"type": "dish", "result": dish_result_to_dict(r)})
 
     def ranked(self, q: DishQuery) -> list[Candidate]:
-        index, store = self.engine.index, self.engine.store
-        cands = [c for c in rank(q, index.retrieve(q), index.idf) if not store.is_bad_image(c.item.img_url)]
+        cands = _rank_pool(self.engine, q)
         for c in cands:
             if c.item.res_url in self.live_urls:
                 c.source = "live"
+        return cands
+
+    def ranked_group(self, g: _Group) -> list[Candidate]:
+        """Candidates of every rung, rung 0 first; a photo found by an earlier rung is not repeated."""
+        seen: set[str] = set()
+        cands: list[Candidate] = []
+        for i, rq in enumerate(g.rungs):
+            for c in self.ranked(rq):
+                if c.item.img_url not in seen:
+                    seen.add(c.item.img_url)
+                    c.rung = i
+                    cands.append(c)
         return cands
 
     def settle_all(self) -> None:
@@ -525,14 +565,25 @@ class _Run:
             if changed and row.name not in read_as and len(read_as) < _READ_AS_LOG_CAP:
                 read_as.add(row.name)
                 self.say(f"Read '{row.name}' as '{fixed}'")
-            q = parse_dish(fixed, speller.fix_text(row.category), row.description, display=row.name)
+            category = speller.fix_text(row.category)
+            q = parse_dish(fixed, category, row.description, display=row.name)
+            if row.diet:
+                q = replace(q, diet=row.diet)
+            rungs: list[DishQuery] = []
+            for name in row.photo_names or lookalike_names(fixed):
+                rq = parse_dish(speller.fix_text(name), category, "", display=name)
+                if row.diet:
+                    rq = replace(rq, diet=row.diet)
+                if any(rq.variants) and rq.base_key not in {q.base_key, *(x.base_key for x in rungs)}:
+                    rungs.append(rq)
             r = DishResult(row=row.row, sku=f"{prefix}-{row.row:03d}", name=row.name,
                            category=row.category or infer_category(q), description=row.description,
-                           price=row.price)
+                           price=row.price, diet=row.diet or (q.diet if q.diet != "unknown" else ""),
+                           photo_names=[rq.display for rq in rungs])
             self.results.append(r)
             key = q.base_key or f"#{row.row}"
             if key not in by_key:
-                by_key[key] = _Group(key, q)
+                by_key[key] = _Group(key, q, rungs)
                 self.groups.append(by_key[key])
             by_key[key].rows.append(r)
         self.say(f"Menu has {len(self.results)} dishes ({len(self.groups)} distinct)")
@@ -620,20 +671,26 @@ class _Run:
         for i, g in enumerate(todo):
             self.check()
             try:
-                g.cands = self.ranked(g.q)
+                g.cands = self.ranked_group(g)
             except Exception as exc:
                 self.fail_group(g, exc)
             self.stage("match", (i + 1) / len(todo))
 
     def search(self) -> None:
         opts, engine = self.opts, self.engine
-        if not opts.live_search or opts.live_budget_menus <= 0 or engine.blocked:
+        zomato_ok = opts.live_budget_menus > 0 and not engine.blocked
+        if not opts.live_search or not (zomato_ok or engine.swiggy is not None):
             return
         unresolved = [g for g in self.groups
                       if not g.source and not g.failed and any(g.q.variants) and not _confident(g.cands)]
         if not unresolved:
             return
         self.stage("search")
+        if engine.swiggy is not None:
+            self._swiggy_search(unresolved)
+            unresolved = [g for g in unresolved if not _confident(g.cands)]
+        if not unresolved or not zomato_ok:
+            return
         cities = list(dict.fromkeys(c for c in [opts.city, *DEFAULT_SEARCH_CITIES] if c in CITIES))
         budget = opts.live_budget_menus
         cache: dict[tuple, list[str]] = {}
@@ -686,10 +743,37 @@ class _Run:
                     self._fetch_menus(targets)
                 finally:
                     for g in unresolved:
-                        g.cands = self.ranked(g.q)
+                        g.cands = self.ranked_group(g)
                     unresolved = [g for g in unresolved if not _confident(g.cands)]
         except ZomatoBlocked:
             self._blocked()
+
+    def _swiggy_search(self, groups: list[_Group]) -> None:
+        """Swiggy dish search for each group's own name, then its look-alike names, until one is found."""
+        opts, engine = self.opts, self.engine
+        cities = [c for c in dict.fromkeys([opts.city, "pune", "mumbai", "bangalore"]) if c in SWIGGY_CITIES][:2]
+        done: set[tuple[str, str]] = set()
+        try:
+            for n, g in enumerate(groups):
+                self.check()
+                for i, rq in enumerate(g.rungs[:3]):
+                    for city in cities:
+                        key = (_query_text(rq.raw), city)
+                        if key in done:
+                            continue
+                        if len(done) >= SWIGGY_MAX_REQUESTS:
+                            return
+                        done.add(key)
+                        for menu in engine.swiggy.search_dishes(*key):
+                            engine.add_items(menu)
+                    g.cands = self.ranked_group(g)
+                    if _confident(g.cands) or any(c.rung == i and c.score.tier in ("exact", "strong")
+                                                  for c in g.cands):
+                        break
+                self.stage("search", (n + 1) / len(groups))
+        except SwiggyBlocked:
+            self.warnings.append(SWIGGY_BLOCKED_MESSAGE)
+            self.say(SWIGGY_BLOCKED_MESSAGE)
 
     def _fetch_menus(self, urls: list[str]) -> None:
         if not urls:
@@ -730,9 +814,9 @@ class _Run:
                 self.stage("verify", (i + 1) / len(self.groups))
         self.write_results()
 
-    def _verify_group(self, g: _Group, pool: ThreadPoolExecutor, sizes: Counter) -> None:
+    def _screen(self, top: list[Candidate], pool: ThreadPoolExecutor) -> tuple[dict[str, np.ndarray], list[Candidate]]:
+        """Fetch thumbnails/embeddings for top; returns (embeddings by img_url, candidates with a usable photo)."""
         engine, vision, store = self.engine, self.engine.vision, self.engine.store
-        top = g.cands[:8]
         vecs: dict[str, np.ndarray] = {}
         if vision.available:
             for c in top:
@@ -753,7 +837,12 @@ class _Run:
                 store.put_embedding(url, vec)
                 vecs[url] = vec
         ok_urls = vecs.keys() if vision.available else {url for url, _ in fetched}
-        survivors = [c for c in top if c.item.img_url in ok_urls]
+        return vecs, [c for c in top if c.item.img_url in ok_urls]
+
+    def _verify_group(self, g: _Group, pool: ThreadPoolExecutor, sizes: Counter) -> None:
+        vision = self.engine.vision
+        zero = [c for c in g.cands if c.rung == 0]
+        vecs, survivors = self._screen(zero[:8], pool)
 
         kept: list[Candidate] = []
         if vision.available and survivors:
@@ -790,6 +879,9 @@ class _Run:
                     continue
             gated.append(c)
         kept = gated
+        rung = 0
+        if not kept:
+            rung, kept = self._lookalike_kept(g, pool, sizes)
         kept.sort(key=lambda c: (_TIER_RANK[c.score.tier], -c.final))
 
         if not kept:
@@ -797,8 +889,8 @@ class _Run:
                 reason = "Name is not in English letters — add an English name"
             elif g.q.is_combo:
                 reason = "Combo dish — ask the owner for a photo of the combo"
-            elif g.cands:
-                best = g.cands[0].item
+            elif zero:
+                best = zero[0].item
                 reason = f"Only uncertain matches found (best: {best.name} @ {best.res_name})"
             else:
                 reason = "Not found on Zomato"
@@ -813,9 +905,42 @@ class _Run:
         self.used_images[best.item.img_url] = g.key
         pick = _cand_dict(best)
         alternates = [_cand_dict(c) for c in kept if c is not best][:4]
+        search_name = g.rungs[rung].display if rung else ""
         for r in g.rows:
             _apply_pick(r, pick)
             r.alternates = [dict(a) for a in alternates]
+            r.lookalike, r.search_name = bool(rung), search_name
+            if rung:
+                r.reason = f"Look-alike photo ({search_name}) — approve it or search again"
+
+    def _lookalike_kept(self, g: _Group, pool: ThreadPoolExecutor, sizes: Counter) -> tuple[int, list[Candidate]]:
+        """Screened exact/strong candidates of the first look-alike rung that has any, with that rung."""
+        rung = next((c.rung for c in g.cands if c.rung >= 1 and c.score.tier in ("exact", "strong")), 0)
+        if not rung:
+            return 0, []
+        top = [c for c in g.cands if c.rung == rung and c.score.tier in ("exact", "strong")][:4]
+        vecs, survivors = self._screen(top, pool)
+        vision, rq = self.engine.vision, g.rungs[rung]
+        if not (vision.available and survivors):
+            for c in survivors:
+                c.final = c.score.text
+            return rung, survivors
+        mat = np.stack([vecs[c.item.img_url] for c in survivors])
+        food = food_prob(vision, mat)
+        margins = head_margin(vision, mat, rq.head)
+        cons = consensus(mat, np.array([c.score.text for c in survivors]))
+        ts = text_sim(vision, mat, rq.raw)
+        kept = []
+        for j, c in enumerate(survivors):
+            c.food_ok = bool(food[j] >= FOOD_MIN_PROB)
+            c.type_ok = bool(margins[j] >= HEAD_SOFT_VETO)
+            c.consensus, c.vision = float(cons[j]), float(ts[j])
+            if c.food_ok and c.type_ok:
+                big_brand = (c.source in ("pool", "live") and sizes[c.item.chain_key] >= 5
+                             and c.item.chain_key != self.vendor_key)
+                c.final = _combine_scores(c, big_brand)
+                kept.append(c)
+        return rung, kept
 
     def photos(self) -> None:
         self.stage("photos")
@@ -830,8 +955,7 @@ class _Run:
                     self._photo_group(g)
                 except Exception as exc:
                     self.fail_group(g, exc)
-            self.emit_rows([r for r in g.rows
-                            if not (self.opts.upload and r.local_image and not r.hosted_url)])
+            self.emit_rows([r for r in g.rows if not (self.opts.upload and _awaits_upload(r))])
             self.stage("photos", (i + 1) / len(self.groups))
         if not self.brand_guard.available:
             message = f"Logo check unavailable: {self.brand_guard.reason}"
@@ -896,11 +1020,11 @@ class _Run:
             return
         self.stage("upload")
         todo = [g for g in self.groups
-                if not g.failed and not g.resumed and any(r.local_image and not r.hosted_url for r in g.rows)]
+                if not g.failed and not g.resumed and any(_awaits_upload(r) for r in g.rows)]
         stop_error = "" if self.uploader is not None else NO_KEY_MESSAGE
         for i, g in enumerate(todo):
             self.check()
-            rows = [r for r in g.rows if r.local_image and not r.hosted_url]
+            rows = [r for r in g.rows if _awaits_upload(r)]
             try:
                 if stop_error:
                     raise UploadError(stop_error)
@@ -969,6 +1093,7 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
             r.alternates = [_pick_dict(r), *r.alternates]
             r.local_image, r.hosted_url, r.zomato_img = "", "", ""
             r.status, r.reason = "needs_photo", "Marked by you: needs owner photo"
+            r.lookalike = r.approved = False
         else:
             try:
                 alt = r.alternates[alt_index]
@@ -990,6 +1115,7 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
             r.alternates = alternates
             r.item_name, r.restaurant, r.restaurant_url = alt["item_name"], alt["restaurant"], alt["restaurant_url"]
             r.zomato_img, r.tier, r.confidence, r.source = alt["zomato_img"], alt["tier"], alt["confidence"], alt["source"]
+            r.approved, r.lookalike = True, bool(alt.get("rung"))
             r.local_image = f"images/{sku}.jpg"
             r.image_size = f"{w}x{h}"
             (job_dir / r.local_image).write_bytes(jpeg)
@@ -1014,3 +1140,81 @@ def choose_alternate(engine: Engine, job_dir: Path, sku: str, alt_index: int | N
 
 
         return r
+
+
+def _sku_index(data: list[dict], sku: str) -> int:
+    for i, d in enumerate(data):
+        if d["sku"] == sku:
+            return i
+    raise ValueError(f"Unknown SKU {sku}")
+
+
+def search_photos(engine: Engine, job_dir: Path, sku: str, query: str) -> DishResult:
+    """Find photos of `query` (pool, then Swiggy) and store them as sku's alternates; its photo is kept."""
+    job_dir = Path(job_dir)
+    results_file = job_dir / "results.json"
+    with job_lock(job_dir):
+        data = json.loads(results_file.read_text(encoding="utf-8"))
+        r = dish_result_from_dict(data[_sku_index(data, sku)])
+        city = load_job(job_dir).get("options", {}).get("city", "")
+    q = parse_dish(query, r.category, "", display=query)
+    if r.diet:
+        q = replace(q, diet=r.diet)
+    if not any(q.variants):
+        raise ValueError("Type a dish name to search for")
+    cands = _rank_pool(engine, q)
+    if engine.swiggy is not None and sum(c.score.tier in ("exact", "strong") for c in cands) < 4:
+        try:
+            for slug in dict.fromkeys([city if city in SWIGGY_CITIES else "pune", "mumbai"]):
+                for menu in engine.swiggy.search_dishes(_query_text(query), slug):
+                    engine.add_items(menu)
+        except SwiggyBlocked:
+            pass
+        cands = _rank_pool(engine, q)
+    top = cands[:8]
+
+    with job_lock(job_dir):
+        data = json.loads(results_file.read_text(encoding="utf-8"))
+        idx = _sku_index(data, sku)
+        r = dish_result_from_dict(data[idx])
+        r.alternates = [dict(_cand_dict(c), rung=max(c.rung, 1)) for c in top]
+        r.search_name = query
+        data[idx] = dish_result_to_dict(r)
+        _write_json(results_file, data)
+    return r
+
+
+def approve_dishes(engine: Engine, job_dir: Path, skus: list[str], uploader: Uploader | None) -> list[DishResult]:
+    """Approve the look-alike photos of skus that are in review: upload them (if the job uploads) and settle."""
+    job_dir = Path(job_dir)
+    results_file = job_dir / "results.json"
+    with job_lock(job_dir):
+        data = json.loads(results_file.read_text(encoding="utf-8"))
+        idxs = [_sku_index(data, sku) for sku in skus]
+        job = load_job(job_dir)
+        upload = bool(job.get("options", {}).get("upload", True))
+        results = []
+        try:
+            for idx in idxs:
+                r = dish_result_from_dict(data[idx])
+                results.append(r)
+                if r.status != "review":
+                    continue
+                if upload:
+                    if uploader is None:
+                        raise ValueError(NO_KEY_MESSAGE)
+                    try:
+                        r.hosted_url = uploader.upload((job_dir / r.local_image).read_bytes(), r.name)
+                    except UploadError as exc:
+                        raise ValueError(str(exc)) from exc
+                r.approved = True
+                r.status, r.reason = "", ""
+                _settle(r, upload)
+                data[idx] = dish_result_to_dict(r)
+        finally:
+            # Keep the approvals (and uploads) done before an error.
+            _write_json(results_file, data)
+            job["sheets_stale"] = True
+            job["updated"] = _now()
+            _write_json(job_dir / "job.json", job)
+    return results

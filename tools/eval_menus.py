@@ -133,7 +133,7 @@ def _print_event(vendor: str, ev: dict) -> None:
 
 
 def _write_summary_csv(path: Path, rows: list[dict]) -> None:
-    fields = ["menu", "total", "ready", "needs_photo", "needs_price", "errors", "coverage%"]
+    fields = ["menu", "total", "ready", "review", "needs_photo", "needs_price", "errors", "coverage%"]
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -186,7 +186,7 @@ def main(argv: list[str] | None = None) -> None:
 
         total = summary.get("total", 0)
         row = {
-            "menu": stem, "total": total, "ready": summary.get("ready", 0),
+            "menu": stem, "total": total, "ready": summary.get("ready", 0), "review": summary.get("review", 0),
             "needs_photo": summary.get("needs_photo", 0), "needs_price": summary.get("needs_price", 0),
             "errors": summary.get("errors", 0), "coverage%": round(summary.get("coverage", 0.0) * 100, 1),
         }

@@ -8,6 +8,7 @@ import threading
 import zlib
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import numpy as np
 import openpyxl
@@ -18,11 +19,24 @@ from studio import pipeline
 from studio.brand import BrandGuard
 from studio.config import atomic_write_text
 from studio.hosting import Uploader
-from studio.imaging import THUMB_SUFFIX
+from studio.imaging import THUMB_SUFFIX, full_url, thumb_url
 from studio.models import Candidate, DishQuery, ImgbbKey, MatchScore, PoolItem, RestaurantMenu
-from studio.pipeline import NO_KEY_MESSAGE, Engine, JobOptions, list_jobs, load_job, run_job
+from studio.pipeline import (
+    NO_KEY_MESSAGE,
+    SWIGGY_BLOCKED_MESSAGE,
+    Engine,
+    JobOptions,
+    approve_dishes,
+    choose_alternate,
+    list_jobs,
+    load_job,
+    rebuild_outputs,
+    run_job,
+    search_photos,
+)
 from studio.sheets import safe_vendor
 from studio.store import PoolStore
+from studio.swiggy import SEARCH_URL, SwiggyClient, parse_dish_search
 from studio.vision import FOOD_PROMPTS, NullVision
 from studio.zomato import Http
 from tests.conftest import FakeResponse, FakeSession, make_xlsx
@@ -909,3 +923,149 @@ def test_fix2_tc7_atomic_write_text_retries_permission_error(tmp_path, monkeypat
 
     assert attempts["n"] == 3
     assert path.read_text(encoding="utf-8") == "hello"
+
+
+# ---- A5: look-alike rungs, Swiggy search, review status, search/approve helpers ----
+
+LOOKALIKE_DISH = "Green Chilli Paneer Pizza (Single Cheese)"
+SWIGGY_FIXTURE = Path(__file__).parent / "fixtures" / "swiggy" / "dish_search_mushroom_uttapam.json"
+
+
+def _lookalike_job(env) -> dict:
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    menu = env.menu([[LOOKALIKE_DISH, "Pizza", "", 120]])
+    return env.run(menu, JobOptions(vendor="Test Cafe", live_search=False))
+
+
+def test_a5_tc1_lookalike_photo_goes_to_review(tmp_path):
+    env = Env(tmp_path)
+
+    summary = _lookalike_job(env)
+
+    r = env.results()[LOOKALIKE_DISH]
+    assert r["status"] == "review" and r["lookalike"] is True and r["search_name"] == "Paneer Pizza"
+    assert r["reason"] == "Look-alike photo (Paneer Pizza) — approve it or search again"
+    assert r["local_image"] and (tmp_path / "job1" / r["local_image"]).is_file()
+    assert r["hosted_url"] == "" and env.posts == []
+    assert col(sheet(env, "Test Cafe", "UPLOAD_READY"), "D", 1) == [None]
+    assert col(sheet(env, "Test Cafe", "PENDING"), "D", 1) == [LOOKALIKE_DISH]
+    assert summary["review"] == 1
+    assert [e["result"]["status"] for e in env.events if e["type"] == "dish"] == ["review"]
+
+
+def test_a5_tc2_photo_names_column_is_searched(tmp_path):
+    env = Env(tmp_path)
+    env.pool("grill-place", [("Chicken Lollipop", "Starters", "nonveg", "lollipop")])
+    # retrieval skips tokens found in over a quarter of a tiny pool, so pad it
+    env.pool("filler-place", [("Cheese Pizza", "Pizza", "veg", "cheese1"), ("Cold Coffee", "Drinks", "veg", "cc1"),
+                              ("Mango Shake", "Shakes", "veg", "mango1")])
+    menu = env.menu([["Tandoori Lollipop", "Starters", "", 220, "Non-Veg", "Chicken Lollipop"]],
+                    header=[*HEADER, "Diet", "Photo Names"])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    r = env.results()["Tandoori Lollipop"]
+    assert r["status"] == "review" and r["search_name"] == "Chicken Lollipop" and r["diet"] == "nonveg"
+    assert r["photo_names"] == ["Chicken Lollipop"]
+
+
+def test_a5_tc3_own_name_match_wins(tmp_path):
+    env = Env(tmp_path)
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    menu = env.menu([["Paneer Pizza", "Pizza", "", 199]])
+
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False), upload=False)
+
+    r = env.results()["Paneer Pizza"]
+    assert r["status"] == "ready" and r["lookalike"] is False and r["search_name"] == ""
+
+
+def _route_swiggy(env, status: int = 200) -> None:
+    text = SWIGGY_FIXTURE.read_text(encoding="utf-8")
+    env.session.add(SEARCH_URL, FakeResponse(status, text if status == 200 else "denied"))
+    for menu in parse_dish_search(json.loads(text), "pune"):
+        for it in menu.items:
+            jpeg = noise_jpeg(zlib.crc32(it.img_url.encode()))
+            env.session.add(thumb_url(it.img_url), FakeResponse(200, content=jpeg))
+            env.session.add(full_url(it.img_url), FakeResponse(200, content=jpeg))
+
+
+def test_a5_tc4_swiggy_search_finds_photo(tmp_path):
+    env = Env(tmp_path)
+    _route_swiggy(env)
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    menu = env.menu([["Masala Uttapam", "South Indian", "", 90]])
+    opts = JobOptions(vendor="Test Cafe", city="pune")
+
+    env.run(menu, opts, upload=False)
+
+    assert env.results()["Masala Uttapam"]["status"] == "needs_photo"
+    assert not any(url == SEARCH_URL for url, _ in env.session.calls)
+
+    engine = Engine(env.store, env.vision, env.http, swiggy=SwiggyClient(env.http))
+    env.run(menu, opts, job="job2", engine=engine, upload=False)
+
+    r = env.results("job2")["Masala Uttapam"]
+    assert r["status"] == "ready" and r["source"] == "swiggy"
+
+
+def test_a5_tc5_swiggy_blocked_continues(tmp_path):
+    env = Env(tmp_path)
+    http = Http(session=env.session, min_interval=0.0, max_retries=0, sleep=lambda s: None)
+    _route_swiggy(env, status=403)
+    env.session.add(SUGGEST, FakeResponse(200, suggest_json([])))
+    menu = env.menu([["Masala Uttapam", "South Indian", "", 90], ["Onion Dosa", "South Indian", "", 80]])
+    engine = Engine(env.store, env.vision, http, swiggy=SwiggyClient(http))
+
+    summary = env.run(menu, JobOptions(vendor="Test Cafe", city="pune"), engine=engine, upload=False)
+
+    assert load_job(tmp_path / "job1")["status"] == "done"
+    assert summary["warnings"].count(SWIGGY_BLOCKED_MESSAGE) == 1
+    assert sum(url == SEARCH_URL for url, _ in env.session.calls) == 1
+    assert env.results()["Masala Uttapam"]["status"] == "needs_photo"
+
+
+def test_a5_tc6_approve_uploads_and_readies(tmp_path):
+    env = Env(tmp_path)
+    _lookalike_job(env)
+    job_dir, engine = tmp_path / "job1", env.engine()
+
+    [r] = approve_dishes(engine, job_dir, ["TC-001"], env.uploader)
+
+    assert r.status == "ready" and r.approved is True and r.hosted_url.startswith("https://i.ibb.co/")
+    assert env.results()[LOOKALIKE_DISH]["hosted_url"] == r.hosted_url
+    assert load_job(job_dir)["sheets_stale"] is True
+    rebuild_outputs(engine, job_dir)
+    assert col(sheet(env, "Test Cafe", "UPLOAD_READY"), "D", 1) == [LOOKALIKE_DISH]
+
+    before = env.results()[LOOKALIKE_DISH]
+    [again] = approve_dishes(engine, job_dir, ["TC-001"], env.uploader)
+    assert again.status == "ready" and len(env.posts) == 1
+    assert env.results()[LOOKALIKE_DISH] == before
+
+    with pytest.raises(ValueError, match="Unknown SKU TC-999"):
+        approve_dishes(engine, job_dir, ["TC-999"], env.uploader)
+
+
+def test_a5_tc7_search_photos_then_choose(tmp_path):
+    env = Env(tmp_path)
+    env.pool("thali-place", [("Veg Thali", "Thali", "veg", "veg-thali")])
+    env.pool("pizza-place", [("Paneer Pizza", "Pizza", "veg", "paneer-pizza")])
+    menu = env.menu([["Shubham All-in-One Thali", "Thali", "", 250]])
+    env.run(menu, JobOptions(vendor="Test Cafe", live_search=False))
+    job_dir, engine = tmp_path / "job1", env.engine()
+    first = env.results()["Shubham All-in-One Thali"]
+    assert first["status"] in ("review", "needs_photo")
+
+    r = search_photos(engine, job_dir, "TC-001", "Veg Thali")
+
+    assert r.search_name == "Veg Thali"
+    assert any(a["item_name"] == "Veg Thali" and a["rung"] >= 1 for a in r.alternates)
+    assert r.zomato_img == first["zomato_img"] and r.status == first["status"]
+    assert env.results()["Shubham All-in-One Thali"]["alternates"] == r.alternates
+    with pytest.raises(ValueError, match="Type a dish name to search for"):
+        search_photos(engine, job_dir, "TC-001", "  ")
+
+    chosen = choose_alternate(engine, job_dir, "TC-001", 0, env.uploader)
+
+    assert chosen.status == "ready" and chosen.approved is True and chosen.lookalike is True
