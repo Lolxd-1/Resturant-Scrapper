@@ -217,3 +217,10 @@ def test_a4_lookalike_names_nothing_to_drop():
     from studio.text import lookalike_names
     for name in ("Masala Dosa", "Paneer Pizza", "Honey Chilli Potato Cheese", "Soyabean Fried Rice", ""):
         assert lookalike_names(name) == []
+
+
+def test_l1_uthappa_and_serving_words():
+    assert parse_dish("Onion Uthappa", "Uthappa").head == "UTTAPAM"
+    assert "family" not in tokens("Paper Masala Dosa (Family)")
+    assert parse_dish("Chicken Tandoori (Single Piece)").variants[0] == frozenset({"CHICKEN", "TANDOORI"})
+    assert "pair" not in tokens("Extra Pav (Pair)")

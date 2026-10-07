@@ -93,7 +93,7 @@ _SYNONYM_GROUPS: dict[str, tuple[str, ...]] = {
     "THALI": ("thali", "thalis"),
     "DOSA": ("dosa", "dosai", "dosas"),
     "IDLI": ("idli", "idly", "idlis"),
-    "UTTAPAM": ("uttapam", "uthappam", "uttappa", "uthapam"),
+    "UTTAPAM": ("uttapam", "uthappam", "uttappa", "uthapam", "uthappa", "uthapa", "utappa", "uttapa"),
     "MISAL": ("misal",),
     "SAMOSA": ("samosa", "samose"),
     "KACHORI": ("kachori", "kachodi"),
@@ -210,6 +210,7 @@ NOISE: frozenset[str] = frozenset({
     "the", "of", "with", "and", "or", "plus", "in", "a", "an", "on", "n", "style", "fresh", "new",
     "veg", "vegetarian", "jain", "non", "nonveg", "shree", "shri", "sri", "desi",
     "homemade", "delicious", "tasty", "famous", "best", "premium",
+    "family", "single", "pair", "unlimited",
 })
 
 # kept as tokens, but never required to match (they change nothing visible)

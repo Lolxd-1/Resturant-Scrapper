@@ -163,3 +163,10 @@ def test_protected_hangama_not_phonetically_rewritten():
 def test_tc4_standalone_lachchha_is_read_as_lachha_paratha():
     assert Speller(VOCAB).fix_text("LACHCHHA") == "lachha paratha"
     assert Speller(VOCAB).fix_text("BATER LACHCHHA PARATHA") == "butter lachha paratha"
+
+
+def test_l1_split_skips_short_junk_parts():
+    sp = Speller({**VOCAB, **dict.fromkeys(("tart", "ara", "ding", "ari", "hai"), 20)})
+    assert sp._split("tartara") is None
+    assert sp._split("dingari") is None
+    assert sp.fix_text("ANDAKARI") == "anda curry"
