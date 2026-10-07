@@ -8,7 +8,7 @@ updated: 2026-10-07T13:05:00Z · Claude Code / claude-opus-5-5
 <!-- status: recon | planning | awaiting-approval | executing | integrating | done | blocked -->
 
 ## NEXT ACTION
-B2 done (462). P1 (main) running, then B3 (opus), then B4. Sequential (RAM).
+P1 done (465). B3 (opus, main) running, then B4. Sequential (RAM).
 Milestone B (Gemini) waits for config/gemini_key.txt from the user; contracts for B go into PLAN before briefing.
 
 ## Baseline
@@ -24,8 +24,8 @@ tests: 383 passed, 2 skipped (101 s). Pending sheets evidence: shreee 141/228 re
 - [x] B1 Gemini client + key setting — w5 — deps A5 — merged a5a5321 (gate PASS, review APPROVE; 6 minors -> FINAL polish)
 - [x] L1 Lexicon gaps + retrieval tie-break + split rule — w5 — deps A5 — merged d0bbed5 (gate PASS after perf fix r1)
 - [x] B2 Menu photo reader + CLI — w6 — deps B1 — 7f91e2f..30cbadc (gate PASS)
-- [~] P1 Swiggy breadth-first + option_rung — w6 — deps A5 mode=main
-- [ ] B3 Pipeline enrich + AI judge — w6 — deps B1 A5 + P1
+- [x] P1 Swiggy breadth-first + option_rung — w6 — deps A5 — 036c865..68251a4 (gate PASS; cities outer loop accepted)
+- [~] B3 Pipeline enrich + AI judge — w6 — deps B1 A5 + P1 mode=main model=opus
 - [ ] B4 Web: key, photo upload, prompt — w7 — deps A6 B1 B2 B3
 - [ ] EVAL Eval set + audit — deps A6
 
